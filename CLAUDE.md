@@ -25,3 +25,4 @@ TypeScript y FFmpeg (binarios de `ffmpeg-static` y `ffprobe-static`). La UI est√
 - Revisar la UI sin pantalla: `EDITOR_SNAPSHOT=captura.png npx electron . --project ejemplo`
   (opcional: `EDITOR_SNAPSHOT_JS="__editor.clock.seek(2)"`). Requiere antes `npx vite build`.
 - `ejemplo/` es un proyecto de prueba (est√° en .gitignore).
+- El usuario abre la app con un acceso directo del escritorio que lanza `node_modules/electron/dist/electron.exe` sobre esta carpeta y carga `dist/`. Tras cambiar algo de `src/`, ejecuta `npx vite build` para que el acceso directo vea los cambios.
