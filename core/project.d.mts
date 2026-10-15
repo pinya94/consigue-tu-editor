@@ -75,6 +75,7 @@ export function updateClip(p: Project, clipId: string, patch: Partial<Clip>): Pr
 export function deleteClips(p: Project, ids: string[], o?: { ripple?: boolean }): Project;
 export function removeTimeRanges(p: Project, ranges: Range[]): Project;
 export function zoomAt(c: Clip, local: number): number;
+export function dropSlivers(p: Project): Project;
 export function removeRanges(p: Project, clipId: string, ranges: Range[]): Project;
 export function normalize(p: unknown): Project;
 export function validate(p: Project): string[];

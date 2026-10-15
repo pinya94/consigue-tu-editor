@@ -21,3 +21,9 @@ test('un trozo corto al principio o al final se une a su vecino', () => {
   assert.equal(fmt(mergeShortPieces([{ start: 0.3, end: 2 }], 0, 10, 0.8)), '');
   assert.equal(fmt(mergeShortPieces([{ start: 5, end: 9.6 }], 0, 10, 0.8)), '');
 });
+
+test('un clic o una respiración no parte un silencio en dos', async () => {
+  const { joinAcrossBlips } = await import('../core/media.mjs');
+  const r = joinAcrossBlips([{ start: 1, end: 2 }, { start: 2.2, end: 4 }, { start: 5, end: 6 }], 0.3);
+  assert.equal(fmt(r), '1-4 5-6');
+});

@@ -341,6 +341,27 @@ export function removeRanges(p0, clipId, ranges) {
     for (const c of t.clips) if (c.start >= to - 0.0005) c.start = round(c.start - len);
     sortClips(t);
   }
+  return dropSlivers(p);
+}
+
+// Quita los restos de menos de medio fotograma que dejan los redondeos al cortar,
+// y adelanta lo que va detrás para no dejar huecos.
+export function dropSlivers(p0) {
+  const min = 0.5 / p0.fps;
+  if (!p0.tracks.some((t) => t.clips.some((c) => c.duration < min))) return p0;
+  const p = clone(p0);
+  for (const t of p.tracks) {
+    sortClips(t);
+    let shift = 0;
+    t.clips = t.clips.filter((c) => {
+      if (c.duration < min) {
+        shift += c.duration;
+        return false;
+      }
+      if (shift) c.start = round(c.start - shift);
+      return true;
+    });
+  }
   return p;
 }
 
@@ -378,7 +399,7 @@ export function removeTimeRanges(p0, ranges) {
       sortClips(t);
     }
   }
-  return p;
+  return dropSlivers(p);
 }
 
 // Zoom de un clip en el segundo `local` desde su inicio. Con zoomTo el zoom pasa de `zoom` a `zoomTo`

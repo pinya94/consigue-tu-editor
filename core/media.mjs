@@ -283,9 +283,23 @@ export async function detectSilences(file, { noise = -35, minDuration = 0.5, fro
 }
 
 // Umbral de silencio adaptado al clip: mide el nivel en ventanas de 50 ms, toma el ruido de fondo
-// (percentil 10) y el nivel de voz (percentil 90), y pone el umbral a un tercio del camino.
-export async function autoNoiseThreshold(file, from, to) {
-  const args = ['-hide_banner', '-nostats', '-ss', String(from), '-t', String(to - from), '-i', file, '-vn',
+// (percentil 10) y el nivel de voz (percentil 90), y pone el umbral cerca de la mitad del camino:
+// así las respiraciones y los clics de ratón (unos dB por encima del fondo) cuentan como silencio.
+// Se mide sobre el archivo entero (y se recuerda): un clip corto puede ser casi todo silencio y
+// entonces no tendría voz con la que comparar.
+const thresholdCache = new Map();
+export async function autoNoiseThreshold(file) {
+  let mtime = 0;
+  try {
+    mtime = fs.statSync(file).mtimeMs;
+  } catch {}
+  const key = file + '|' + mtime;
+  if (!thresholdCache.has(key)) thresholdCache.set(key, measureThreshold(file));
+  return thresholdCache.get(key);
+}
+
+async function measureThreshold(file) {
+  const args = ['-hide_banner', '-nostats', '-i', file, '-vn',
     '-af', 'aresample=16000,asetnsamples=n=800,astats=metadata=1:reset=1:measure_perchannel=none:measure_overall=RMS_level,ametadata=print:key=lavfi.astats.Overall.RMS_level',
     '-f', 'null', '-'];
   const { err } = await run(ffmpegPath, args);
@@ -293,7 +307,7 @@ export async function autoNoiseThreshold(file, from, to) {
   if (levels.length < 20) return -35;
   const floor = levels[Math.floor(levels.length * 0.1)];
   const speech = levels[Math.floor(levels.length * 0.9)];
-  const threshold = floor + Math.max(6, (speech - floor) / 3);
+  const threshold = floor + Math.max(8, (speech - floor) * 0.45);
   return Math.round(Math.max(-60, Math.min(-20, threshold)));
 }
 
@@ -302,9 +316,10 @@ export async function autoNoiseThreshold(file, from, to) {
 //  - margen asimétrico: poco antes de empezar a hablar (padBefore) y más después de hablar (padAfter),
 //    para no comerse finales de palabra ni respiraciones;
 //  - solo silencios de al menos minDuration (las pausas naturales se quedan);
+//  - un ruido suelto de menos de maxBlip (un clic, una respiración) no parte un silencio en dos;
 //  - ningún trozo hablado puede quedar más corto que minClip: si pasaría, ese silencio no se quita.
 export async function clipSilences(dir, p, clip, opts = {}) {
-  const { minDuration = 0.6, minClip = 0.8 } = opts;
+  const { minDuration = 0.6, minClip = 0.8, maxBlip = 0.3 } = opts;
   const padBefore = opts.padBefore ?? opts.pad ?? 0.1;
   const padAfter = opts.padAfter ?? opts.pad ?? 0.22;
   const asset = p.assets[clip.src];
@@ -312,8 +327,8 @@ export async function clipSilences(dir, p, clip, opts = {}) {
   const file = resolveSrc(dir, clip.src);
   const from = clip.in;
   const to = clip.in + clip.duration;
-  const noise = opts.noise == null || opts.noise === 'auto' ? await autoNoiseThreshold(file, from, to) : Number(opts.noise);
-  const raw = await detectSilences(file, { noise, minDuration, from, to });
+  const noise = opts.noise == null || opts.noise === 'auto' ? await autoNoiseThreshold(file) : Number(opts.noise);
+  const raw = joinAcrossBlips(await detectSilences(file, { noise, minDuration: 0.15, from, to }), maxBlip).filter((r) => r.end - r.start >= minDuration);
   // rangos a quitar, en tiempo del archivo fuente
   let ranges = [];
   for (const r of raw) {
@@ -326,6 +341,17 @@ export async function clipSilences(dir, p, clip, opts = {}) {
     noise,
     ranges: ranges.map((r) => ({ start: round3(clip.start + (r.start - from)), end: round3(clip.start + (r.end - from)) })),
   };
+}
+
+// Une silencios separados por un ruido muy corto (más corto que maxBlip).
+export function joinAcrossBlips(ranges, maxBlip) {
+  const out = [];
+  for (const r of [...ranges].sort((a, b) => a.start - b.start)) {
+    const last = out[out.length - 1];
+    if (last && r.start - last.end < maxBlip) last.end = Math.max(last.end, r.end);
+    else out.push({ ...r });
+  }
+  return out;
 }
 
 // Si entre dos silencios queda un trozo hablado más corto que minClip, uno de esos silencios se
