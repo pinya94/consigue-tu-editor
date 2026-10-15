@@ -97,10 +97,16 @@ function isAnimated(it) {
 }
 
 // Entrada de FFmpeg para un elemento visual, recortada a [from, from+dur) de su archivo.
+// Para vídeo se empieza a leer un poco antes (preroll) y se recorta con trim: así el primer
+// fotograma está justo en el punto de corte y no queda un fotograma negro al empezar el clip.
 function visualInput(p, it, from, dur) {
-  if (it.kind === 'image') return ['-loop', '1', '-framerate', String(p.fps), '-t', n(dur), '-i', it.file];
-  const pre = it.alphaWebm ? ['-c:v', 'libvpx-vp9'] : []; // el decodificador nativo de VP9 ignora el canal alfa
-  return [...pre, '-ss', n(from), '-t', n(dur), '-i', it.file];
+  if (it.kind === 'image') return { args: ['-loop', '1', '-framerate', String(p.fps), '-t', n(dur), '-i', it.file], trim: '' };
+  const dec = it.alphaWebm ? ['-c:v', 'libvpx-vp9'] : []; // el decodificador nativo de VP9 ignora el canal alfa
+  const preroll = Math.min(0.5, from);
+  return {
+    args: [...dec, '-ss', n(from - preroll), '-t', n(dur + preroll), '-i', it.file],
+    trim: preroll > 0 ? `trim=start=${n(preroll)},setpts=PTS-STARTPTS,` : '',
+  };
 }
 
 // ---------- un tramo ----------
@@ -123,10 +129,11 @@ async function exportChunk({ p, items, a, b, enc, fast, videoOut, audioOut, scri
     const len = e - s;
     const local = s - a;
     if (it.visual) {
-      args.push(...visualInput(p, it, from, len));
+      const vin = visualInput(p, it, from, len);
+      args.push(...vin.args);
       const k = idx++;
       const zoom = isAnimated(it) ? zoomAnimFilter(p, it, s - it.start) : zoomFilter(p, it);
-      filters.push(`[${k}:v]fps=${fps},${scaleFilter(p, it.fit)},format=rgba${zoom},setpts=PTS-STARTPTS+${n(local)}/TB[v${k}]`);
+      filters.push(`[${k}:v]${vin.trim}fps=${fps},${scaleFilter(p, it.fit)},format=rgba${zoom},setpts=PTS-STARTPTS+${n(local)}/TB[v${k}]`);
       filters.push(`[${cur}][v${k}]overlay=x=(W-w)/2:y=(H-h)/2:eof_action=pass:enable='between(t,${n(local)},${n(local + len)})'[o${k}]`);
       cur = `o${k}`;
     }
