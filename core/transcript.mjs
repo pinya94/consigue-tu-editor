@@ -41,6 +41,7 @@ const SENTENCE_END = /[.?!…]["»)]*$/;
 export function wordsFromWhisper(json, offset = 0) {
   const words = [];
   let cur = null;
+  let pending = '';
   const flush = () => {
     if (cur && normalizeWord(cur.w)) words.push(cur);
     cur = null;
@@ -52,15 +53,20 @@ export function wordsFromWhisper(json, offset = 0) {
       const from = (t.offsets?.from ?? 0) / 1000;
       const to = (t.offsets?.to ?? 0) / 1000;
       const dtw = t.t_dtw != null && t.t_dtw >= 0 ? t.t_dtw / 100 : null;
-      const startsWord = /^\s/.test(text) || !cur;
+      const startsWord = /^\s/.test(text) || !cur || pending !== '';
       const isPunct = !normalizeWord(text);
+      if (isPunct && /^[¿¡«“"(]+$/.test(text.trim())) {
+        pending += text.trim(); // los signos de apertura van con la palabra siguiente
+        continue;
+      }
       if (isPunct && cur) {
         cur.w += text.trim();
         continue;
       }
       if (startsWord) {
         flush();
-        cur = { w: text.trim(), start: dtw ?? from, end: to, p: t.p ?? 1, n: 1, raw: from };
+        cur = { w: pending + text.trim(), start: dtw ?? from, end: to, p: t.p ?? 1, n: 1, raw: from };
+        pending = '';
       } else {
         cur.w += text;
         cur.end = to;
@@ -200,6 +206,15 @@ export function refineWords(words, mask, rate = FRAME_RATE, { gap = 0.15 } = {})
 // Se quitan las palabras sin voz que van en grupo (dos o más seguidas) y las anotaciones entre
 // paréntesis o corchetes. Una palabra suelta sin voz se queda (puede ser una palabra dicha muy bajo).
 export function dropHallucinations(words) {
+  // (las cachés antiguas tienen "Pero,¿para": el signo de apertura pasa a la palabra siguiente)
+  words = words.map((w) => ({ ...w }));
+  for (let i = 0; i < words.length - 1; i++) {
+    const m = words[i].w.match(/^(.*[^¿¡«“"(])([¿¡«“"(]+)$/);
+    if (m) {
+      words[i].w = m[1];
+      words[i + 1].w = m[2] + words[i + 1].w;
+    }
+  }
   return words.filter((w, i) => {
     if (/^[([*].*[)\]*]$/.test(w.w.trim())) return false;
     if (!w.doubt) return true;
@@ -487,7 +502,12 @@ export function findRetakes(words, opts = {}) {
     const lastWord = words[ph.to].w;
     const lastTok = toks[ph.to];
     const pauseAfter = phrases[k + 1].start - ph.end;
-    if (/…|\.\.\.$/.test(lastWord) || (HANGING.has(lastTok) && pauseAfter >= 0.5 && !SENTENCE_END.test(lastWord))) {
+    // si lo siguiente empieza en minúscula, la frase sigue (es una pausa, no un corte)
+    const nextWord = words[phrases[k + 1].from].w.replace(/^[¿¡«"(]+/, '');
+    if (/^\p{Ll}/u.test(nextWord)) continue;
+    // whisper también pone "..." en las pausas dramáticas: solo cuenta en frases cortas
+    const dots = /…|\.\.\.$/.test(lastWord) && ph.to - ph.from < 4;
+    if (dots || (HANGING.has(lastTok) && pauseAfter >= 0.5 && !SENTENCE_END.test(lastWord))) {
       add('cortada', ph.from, ph.to, `Frase a medias: acaba en "${lastWord}"`);
     }
   }

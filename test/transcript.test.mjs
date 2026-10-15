@@ -32,13 +32,15 @@ test('junta los tokens de whisper en palabras con el tiempo del DTW', () => {
           { text: 'ensas', offsets: { from: 200, to: 500 }, t_dtw: 40, p: 0.8 },
           { text: ' que', offsets: { from: 500, to: 700 }, t_dtw: 60, p: 0.99 },
           { text: ',', offsets: { from: 700, to: 800 }, t_dtw: 70, p: 0.5 },
-          { text: ' sí', offsets: { from: 800, to: 1000 }, t_dtw: 85, p: 0.9 },
+          { text: ' ¿', offsets: { from: 800, to: 800 }, t_dtw: 80, p: 0.9 },
+          { text: 'sí', offsets: { from: 800, to: 1000 }, t_dtw: 85, p: 0.9 },
+          { text: '?', offsets: { from: 1000, to: 1000 }, t_dtw: 99, p: 0.9 },
         ],
       },
     ],
   };
   const w = wordsFromWhisper(json);
-  assert.deepEqual(w.map((x) => x.w), ['Piensas', 'que,', 'sí']);
+  assert.deepEqual(w.map((x) => x.w), ['Piensas', 'que,', '¿sí?']);
   assert.equal(w[0].start, 0.3);
   assert.equal(w[1].start, 0.6);
   assert.equal(w[0].p, 0.8);
@@ -100,13 +102,14 @@ test('quita lo que whisper se inventa en los silencios', () => {
   const w = [
     { w: 'hola', start: 0, end: 0.3 },
     { w: 'bajito', start: 0.5, end: 0.8, doubt: true },
-    { w: 'adiós.', start: 1, end: 1.3 },
+    { w: 'adiós.¿', start: 1, end: 1.3 },
+    { w: 'vale?', start: 1.4, end: 1.6 },
     { w: '(Silencio)', start: 5, end: 9 },
     { w: '¡Gracias', start: 20, end: 20.3, doubt: true },
     { w: 'por', start: 20.3, end: 20.5, doubt: true },
     { w: 'ver!', start: 20.5, end: 20.8, doubt: true },
   ];
-  assert.deepEqual(dropHallucinations(w).map((x) => x.w), ['hola', 'bajito', 'adiós.']);
+  assert.deepEqual(dropHallucinations(w).map((x) => x.w), ['hola', 'bajito', 'adiós.', '¿vale?']);
 });
 
 test('pasa las palabras al timeline y marca las que parte un corte', () => {
@@ -164,13 +167,14 @@ test('frases distintas no son tomas repetidas', () => {
 });
 
 test('palabras repetidas seguidas, muletillas y frases a medias', () => {
-  const w = concat(words('y bueno, y bueno vamos allá eh con esto', { start: 0 }), words('porque la', { start: 5 }), words('otra cosa distinta.', { start: 8 }));
+  const w = concat(words('y bueno, y bueno vamos allá eh con esto', { start: 0 }), words('porque la', { start: 5 }), words('Otra cosa distinta.', { start: 8 }), words('Y el nombre es...', { start: 11 }), words('agarraros.', { start: 14 }));
   const r = findRetakes(w);
   const rep = r.find((x) => x.type === 'repeticion');
   assert.ok(rep);
   assert.deepEqual(rep.words, [0, 1]);
   assert.ok(r.find((x) => x.type === 'muletilla' && x.text === 'eh'));
   assert.ok(r.find((x) => x.type === 'cortada' && /porque la/.test(x.text)));
+  assert.ok(!r.find((x) => x.type === 'cortada' && /nombre/.test(x.text))); // pausa dramática: sigue en minúscula
 });
 
 test('rango de corte por palabras: deja una pausa natural a cada lado', () => {
