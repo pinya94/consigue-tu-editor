@@ -97,15 +97,18 @@ function isAnimated(it) {
 }
 
 // Entrada de FFmpeg para un elemento visual, recortada a [from, from+dur) de su archivo.
-// Para vídeo se empieza a leer un poco antes (preroll) y se recorta con trim: así el primer
-// fotograma está justo en el punto de corte y no queda un fotograma negro al empezar el clip.
+// Para vídeo se empieza a leer un poco antes (preroll) y un poco después, y se deja el tiempo 0 del
+// clip exactamente en el punto de corte (restando un desplazamiento fijo, no el del primer fotograma).
+// Así siempre hay fotograma al empezar y al acabar el clip, y no se cuela un fotograma negro.
 function visualInput(p, it, from, dur) {
-  if (it.kind === 'image') return { args: ['-loop', '1', '-framerate', String(p.fps), '-t', n(dur), '-i', it.file], trim: '' };
+  if (it.kind === 'image') return { args: ['-loop', '1', '-framerate', String(p.fps), '-t', n(dur), '-i', it.file], trim: '', exact: false };
   const dec = it.alphaWebm ? ['-c:v', 'libvpx-vp9'] : []; // el decodificador nativo de VP9 ignora el canal alfa
   const preroll = Math.min(0.5, from);
+  const frame = 1 / p.fps;
   return {
-    args: [...dec, '-ss', n(from - preroll), '-t', n(dur + preroll), '-i', it.file],
-    trim: preroll > 0 ? `trim=start=${n(preroll)},setpts=PTS-STARTPTS,` : '',
+    args: [...dec, '-ss', n(from - preroll), '-t', n(dur + preroll + 0.25), '-i', it.file],
+    trim: `trim=start=${n(Math.max(0, preroll - frame))},setpts=PTS-${n(preroll)}/TB,`,
+    exact: true,
   };
 }
 
@@ -133,7 +136,7 @@ async function exportChunk({ p, items, a, b, enc, fast, videoOut, audioOut, scri
       args.push(...vin.args);
       const k = idx++;
       const zoom = isAnimated(it) ? zoomAnimFilter(p, it, s - it.start) : zoomFilter(p, it);
-      filters.push(`[${k}:v]${vin.trim}fps=${fps},${scaleFilter(p, it.fit)},format=rgba${zoom},setpts=PTS-STARTPTS+${n(local)}/TB[v${k}]`);
+      filters.push(`[${k}:v]${vin.trim}fps=${fps},${scaleFilter(p, it.fit)},format=rgba${zoom},setpts=${vin.exact ? 'PTS' : 'PTS-STARTPTS'}+${n(local)}/TB[v${k}]`);
       filters.push(`[${cur}][v${k}]overlay=x=(W-w)/2:y=(H-h)/2:eof_action=pass:enable='between(t,${n(local)},${n(local + len)})'[o${k}]`);
       cur = `o${k}`;
     }
