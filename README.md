@@ -166,3 +166,10 @@ React en `src/` y la CLI en `cli/`. Hay más detalle en [`CLAUDE.md`](CLAUDE.md)
 - Solo Windows por ahora.
 - Las animaciones HTML tienen que funcionar sin internet: las fuentes y librerías van dentro de `media/`.
 - No transcribe el audio.
+
+## Colaborar y licencia
+
+¿Ideas, fallos o mejoras? Lee [CONTRIBUTING.md](CONTRIBUTING.md). Los *issues* y *pull requests* son
+bienvenidos.
+
+Código abierto con [licencia MIT](LICENSE): puedes usarlo, modificarlo y compartirlo gratis.

@@ -70,5 +70,6 @@
       "shortcutName": "Consigue tu editor de vídeo optimizado para Claude gratis",
       "uninstallDisplayName": "Consigue tu editor de vídeo optimizado para Claude gratis"
     }
-  }
+  },
+  "license": "MIT"
 }
