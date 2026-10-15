@@ -138,7 +138,8 @@ export function Editor({ dir, initial, base, onClose }: { dir: string; initial: 
   const remove = useCallback(
     (ripple: boolean) => {
       if (!selection.length) return;
-      apply((p) => P.deleteClips(p, selection, { ripple }));
+      // por defecto todo se recoloca; con Mayús se deja el hueco
+      apply((p) => (ripple ? P.rippleDeleteClips(p, selection) : P.deleteClips(p, selection)));
       setSelection([]);
     },
     [apply, selection],
@@ -253,7 +254,7 @@ export function Editor({ dir, initial, base, onClose }: { dir: string; initial: 
       else if (e.ctrlKey) return;
       else if (e.code === 'Space') togglePlay();
       else if (k === 's') split();
-      else if (k === 'delete' || k === 'backspace') remove(e.shiftKey);
+      else if (k === 'delete' || k === 'backspace') remove(!e.shiftKey);
       else if (k === 'arrowleft') clock.seek(P.snapToFrame(p, clock.time - (e.shiftKey ? 1 : frame)));
       else if (k === 'arrowright') clock.seek(P.snapToFrame(p, clock.time + (e.shiftKey ? 1 : frame)));
       else if (k === 'home') clock.seek(0);
@@ -329,11 +330,11 @@ export function Editor({ dir, initial, base, onClose }: { dir: string; initial: 
           <button onClick={split} title="Cortar en la cabeza lectora (S)">
             ✂ Cortar
           </button>
-          <button onClick={() => remove(false)} disabled={!selection.length} title="Borrar (Supr)">
+          <button onClick={() => remove(true)} disabled={!selection.length} title="Borrar: todo lo de detrás se adelanta, también las animaciones (Supr)">
             Borrar
           </button>
-          <button onClick={() => remove(true)} disabled={!selection.length} title="Borrar y cerrar el hueco (Mayús+Supr)">
-            Borrar y cerrar hueco
+          <button onClick={() => remove(false)} disabled={!selection.length} title="Borrar dejando el hueco (Mayús+Supr)">
+            Borrar dejando hueco
           </button>
           <div className="spacer" />
           <span className="muted">Zoom</span>

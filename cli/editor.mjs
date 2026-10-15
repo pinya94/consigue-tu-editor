@@ -339,8 +339,8 @@ async function main() {
 
     case 'delete': {
       if (!pos.length) fail('Indica al menos un clip');
-      await edit((p) => P.deleteClips(p, pos, { ripple: !!flags.ripple }));
-      console.log(`Borrado: ${pos.join(', ')}${flags.ripple ? ' (huecos cerrados)' : ''}`);
+      await edit((p) => (flags.ripple ? P.rippleDeleteClips(p, pos) : P.deleteClips(p, pos)));
+      console.log(`Borrado: ${pos.join(', ')}${flags.ripple ? ' (todo lo de detrás se ha adelantado)' : ''}`);
       return;
     }
 

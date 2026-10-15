@@ -323,6 +323,35 @@ export function deleteClips(p0, clipIds, { ripple = false } = {}) {
   return p;
 }
 
+// Borra clips y todo lo que va detrás se adelanta para no dejar huecos.
+// Los clips de la pista principal (la primera de vídeo) se quitan como un rango de tiempo en todas
+// las pistas: el vídeo, las animaciones y el audio de detrás se mueven juntos y no se descuadran.
+// Los clips de las demás pistas (animaciones, rótulos, música) solo se quitan: no mueven el vídeo.
+export function rippleDeleteClips(p0, clipIds) {
+  const main = p0.tracks.find((t) => t.kind === 'video');
+  const ranges = [];
+  const others = [];
+  for (const id of clipIds) {
+    const f = findClip(p0, id);
+    if (!f) continue;
+    if (main && f.track.id === main.id) ranges.push({ start: f.clip.start, end: clipEnd(f.clip) });
+    else others.push(id);
+  }
+  let p = deleteClips(p0, others);
+  if (ranges.length) {
+    // rangos contiguos o solapados se unen (p. ej. varios clips seguidos seleccionados)
+    ranges.sort((a, b) => a.start - b.start);
+    const merged = [];
+    for (const r of ranges) {
+      const last = merged[merged.length - 1];
+      if (last && r.start <= last.end + 0.0005) last.end = Math.max(last.end, r.end);
+      else merged.push({ ...r });
+    }
+    p = removeTimeRanges(p, merged);
+  }
+  return p;
+}
+
 // Elimina rangos (en tiempo de timeline) dentro de un clip y cierra los huecos en esa pista.
 // Se usa para quitar silencios. Los rangos se procesan de derecha a izquierda.
 export function removeRanges(p0, clipId, ranges) {

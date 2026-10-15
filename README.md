@@ -39,7 +39,7 @@ FFmpeg viene incluido; no hace falta instalar nada más. Para trabajar con Claud
 | Cortar en la cabeza lectora | `S` o el botón ✂ |
 | Mover un clip | Arrástralo (se pega a los bordes de otros clips; con `Alt`, sin imán) |
 | Recortar | Arrastra el borde izquierdo o derecho del clip |
-| Borrar / borrar y cerrar el hueco | `Supr` / `Mayús+Supr` |
+| Borrar (todo lo de detrás, animaciones incluidas, se adelanta) / borrar dejando el hueco | `Supr` / `Mayús+Supr` |
 | Fotograma a fotograma / de segundo en segundo | `←` `→` / `Mayús+←` `Mayús+→` |
 | Deshacer / rehacer | `Ctrl+Z` / `Ctrl+Y` |
 | Zoom del timeline | `Ctrl+rueda`, `+` `−` o el deslizador |
@@ -170,7 +170,7 @@ Claude usa la CLI, pero tú también puedes usarla. Con la app instalada:
 | `add <archivo> [--track v2] [--at 3]` | Añade un clip |
 | `split <t>` · `trim <clip> --start/--end` · `move <clip> <t>` | Cortar, recortar, mover |
 | `set <clip> zoom=1.2 zoomX=0.5 zoomY=0.4 volume=0.5` | Cambiar propiedades (`zoomTo=1.2 zoomTime=0.4`: zoom animado) |
-| `delete <clip> [--ripple]` | Borrar (y cerrar el hueco) |
+| `delete <clip> [--ripple]` | Borrar (con `--ripple`, todo lo de detrás se adelanta en todas las pistas) |
 | `silences <clip> [--apply]` | Detectar (y quitar) silencios |
 | `sheet <clip> [--every 2]` | Hojas de miniaturas para revisar el vídeo |
 | `frame <t>` | Fotograma final compuesto en PNG |
