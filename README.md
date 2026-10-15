@@ -2,6 +2,8 @@
 
 **Editor de vídeo de escritorio para editar a medias con Claude.**
 
+**[⬇ Descargar para Windows](https://github.com/pinya94/cupcut/releases/latest/download/CupCut-Setup.exe)** · [Página web](https://pinya94.github.io/cupcut/)
+
 CupCut es un editor sencillo: timeline con pistas, cortes, recortes, preview y exportación a MP4.
 Lo especial es que está pensado para trabajar junto a [Claude Code](https://claude.com/claude-code).
 Tú montas el vídeo con el ratón y Claude trabaja sobre el mismo proyecto por código: quita
@@ -14,7 +16,7 @@ que las crea como animaciones.
 
 ## Descargar e instalar (Windows)
 
-1. Descarga `CupCut-Setup-x.y.z.exe` de la página de [**Releases**](https://github.com/pinya94/cupcut/releases/latest).
+1. Descarga `CupCut-Setup.exe` de la página de [**Releases**](https://github.com/pinya94/cupcut/releases/latest).
 2. Ábrelo. Se instala en tu usuario, sin pedir permisos de administrador, y crea un acceso directo.
 3. Windows puede mostrar el aviso *"Windows protegió su PC"*, porque la app no está firmada. Pulsa
    **Más información → Ejecutar de todas formas**.
