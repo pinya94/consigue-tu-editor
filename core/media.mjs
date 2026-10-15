@@ -13,11 +13,11 @@ function unpacked(p) {
   return p.replace('app.asar' + path.sep, 'app.asar.unpacked' + path.sep);
 }
 
-export const ffmpegPath = process.env.CUPCUT_FFMPEG || unpacked(require('ffmpeg-static'));
-export const ffprobePath = process.env.CUPCUT_FFPROBE || unpacked(require('ffprobe-static').path);
+export const ffmpegPath = process.env.EDITOR_FFMPEG || unpacked(require('ffmpeg-static'));
+export const ffprobePath = process.env.EDITOR_FFPROBE || unpacked(require('ffprobe-static').path);
 
 export const MEDIA_DIR = 'media';
-export const CACHE_DIR = path.join('.cupcut', 'cache');
+export const CACHE_DIR = path.join('.editor', 'cache');
 
 export function run(bin, args, { onStderr, onStdout } = {}) {
   return new Promise((resolve, reject) => {
@@ -85,14 +85,16 @@ export function initProject(dir, opts = {}) {
   return p;
 }
 
-const GUIDE_MARK = '<!-- cupcut:auto -->';
+export const APP_NAME = 'Consigue tu editor de vídeo optimizado para Claude gratis';
+
+const GUIDE_MARK = '<!-- editor:auto -->';
 
 // Comando con el que Claude llama a la CLI: el .exe instalado, o node + el script en desarrollo.
 export function cliCommand() {
   const packaged = process.versions.electron && !process.defaultApp;
   if (packaged) return `"${process.execPath.replaceAll('\\', '/')}" --cli`;
   const here = path.dirname(fileURLToPath(import.meta.url));
-  return `node "${path.resolve(here, '..', 'cli', 'cupcut.mjs').replaceAll('\\', '/')}"`;
+  return `node "${path.resolve(here, '..', 'cli', 'editor.mjs').replaceAll('\\', '/')}"`;
 }
 
 // Copia la guía para Claude dentro de la carpeta del proyecto. Si ya hay un CLAUDE.md escrito por
@@ -103,9 +105,9 @@ export function writeProjectGuide(dir) {
   if (!fs.existsSync(template)) return;
   const target = path.join(dir, 'CLAUDE.md');
   // (las versiones antiguas no tenían la marca, pero empezaban con este título)
-  const ours = (t) => t.includes(GUIDE_MARK) || t.startsWith('# Proyecto de vídeo CupCut');
+  const ours = (t) => t.includes(GUIDE_MARK) || t.includes('<!-- cupcut:auto -->') || t.startsWith('# Proyecto de vídeo CupCut');
   if (fs.existsSync(target) && !ours(fs.readFileSync(target, 'utf8'))) return;
-  const text = GUIDE_MARK + '\n' + fs.readFileSync(template, 'utf8').replaceAll('{{CUPCUT}}', cliCommand());
+  const text = GUIDE_MARK + '\n' + fs.readFileSync(template, 'utf8').replaceAll('{{EDITOR}}', cliCommand()).replaceAll('{{NAME}}', APP_NAME);
   if (fs.existsSync(target) && fs.readFileSync(target, 'utf8') === text) return;
   fs.writeFileSync(target, text);
 }
@@ -149,10 +151,10 @@ export async function probe(file) {
   if (!kind) throw new Error(`Tipo no soportado: ${file}`);
   const stat = fs.statSync(file);
   if (kind === 'html') {
-    // Una animación puede declarar su duración: <meta name="cupcut-duration" content="4.5">
+    // Una animación puede declarar su duración: <meta name="animation-duration" content="4.5">
     const html = fs.readFileSync(file, 'utf8');
-    const m = html.match(/<meta[^>]+name=["']cupcut-duration["'][^>]*content=["']([\d.]+)["']/i)
-      || html.match(/<meta[^>]+content=["']([\d.]+)["'][^>]*name=["']cupcut-duration["']/i);
+    const m = html.match(/<meta[^>]+name=["'](?:animation|cupcut)-duration["'][^>]*content=["']([\d.]+)["']/i)
+      || html.match(/<meta[^>]+content=["']([\d.]+)["'][^>]*name=["'](?:animation|cupcut)-duration["']/i);
     return { kind, duration: m ? Number(m[1]) : null, mtime: stat.mtimeMs };
   }
   const { out } = await run(ffprobePath, ['-v', 'error', '-print_format', 'json', '-show_format', '-show_streams', file]);

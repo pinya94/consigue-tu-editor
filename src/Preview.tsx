@@ -130,14 +130,14 @@ function HtmlLayer({ url, local, visible, zoom }: { url: string; local: number; 
   localRef.current = local;
 
   useEffect(() => {
-    ref.current?.contentWindow?.postMessage({ type: 'cupcut-seek', t: local }, '*');
+    ref.current?.contentWindow?.postMessage({ type: 'editor-seek', t: local }, '*');
   }, [local]);
 
   useEffect(() => {
     // cuando la página termina de cargar, se le manda el instante actual
     const onMsg = (e: MessageEvent) => {
-      if (e.source === ref.current?.contentWindow && e.data?.type === 'cupcut-ready') {
-        ref.current?.contentWindow?.postMessage({ type: 'cupcut-seek', t: localRef.current }, '*');
+      if (e.source === ref.current?.contentWindow && e.data?.type === 'editor-ready') {
+        ref.current?.contentWindow?.postMessage({ type: 'editor-seek', t: localRef.current }, '*');
       }
     };
     window.addEventListener('message', onMsg);

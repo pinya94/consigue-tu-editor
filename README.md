@@ -1,10 +1,10 @@
-# CupCut
+# Consigue tu editor de vídeo optimizado para Claude gratis
 
 **Editor de vídeo de escritorio para editar a medias con Claude.**
 
-**[⬇ Descargar para Windows](https://github.com/pinya94/cupcut/releases/latest/download/CupCut-Setup.exe)** · [Página web](https://pinya94.github.io/cupcut/)
+**[⬇ Descargar para Windows](https://github.com/pinya94/consigue-tu-editor/releases/latest/download/ConsigueTuEditor-Setup.exe)** · [Página web](https://pinya94.github.io/consigue-tu-editor/)
 
-CupCut es un editor sencillo: timeline con pistas, cortes, recortes, preview y exportación a MP4.
+Es un editor sencillo: timeline con pistas, cortes, recortes, preview y exportación a MP4.
 Lo especial es que está pensado para trabajar junto a [Claude Code](https://claude.com/claude-code).
 Tú montas el vídeo con el ratón y Claude trabaja sobre el mismo proyecto por código: quita
 silencios, hace acercamientos, crea animaciones… Cada cambio aparece al momento en tu pantalla.
@@ -16,7 +16,7 @@ que las crea como animaciones.
 
 ## Descargar e instalar (Windows)
 
-1. Descarga `CupCut-Setup.exe` de la página de [**Releases**](https://github.com/pinya94/cupcut/releases/latest).
+1. Descarga `ConsigueTuEditor-Setup.exe` de la página de [**Releases**](https://github.com/pinya94/consigue-tu-editor/releases/latest).
 2. Ábrelo. Se instala en tu usuario, sin pedir permisos de administrador, y crea un acceso directo.
 3. Windows puede mostrar el aviso *"Windows protegió su PC"*, porque la app no está firmada. Pulsa
    **Más información → Ejecutar de todas formas**.
@@ -28,7 +28,7 @@ FFmpeg viene incluido; no hace falta instalar nada más. Para trabajar con Claud
 
 ## Primeros pasos
 
-1. Abre CupCut y pulsa **Nuevo proyecto**. Elige una carpeta vacía: ahí se guardará todo.
+1. Abre el editor y pulsa **Nuevo proyecto**. Elige una carpeta vacía: ahí se guardará todo.
 2. Arrastra tus vídeos al timeline, o usa **Importar**. Lo que copies dentro de la carpeta `media/`
    del proyecto aparece solo en la biblioteca.
 3. Edita:
@@ -53,12 +53,12 @@ FFmpeg viene incluido; no hace falta instalar nada más. Para trabajar con Claud
 
 ## Trabajar con Claude
 
-Cada proyecto tiene un archivo `CLAUDE.md` que explica a Claude cómo funciona CupCut. No tienes que
+Cada proyecto tiene un archivo `CLAUDE.md` que explica a Claude cómo funciona el editor. No tienes que
 explicarle nada:
 
 1. Abre una terminal en la carpeta del proyecto (en el Explorador: clic derecho → *Abrir en Terminal*).
 2. Escribe `claude`.
-3. Pídele lo que quieras, con CupCut abierto para ver los cambios en directo.
+3. Pídele lo que quieras, con el editor abierto para ver los cambios en directo.
 
 Ejemplos:
 
@@ -73,7 +73,7 @@ Ejemplos:
 
 > Exporta el vídeo.
 
-Si no te gusta algo, pulsa `Ctrl+Z` en CupCut: los cambios de Claude se deshacen igual que los tuyos.
+Si no te gusta algo, pulsa `Ctrl+Z` en el editor: los cambios de Claude se deshacen igual que los tuyos.
 
 ### Zoom
 
@@ -93,17 +93,17 @@ borran igual. Hay dos tipos:
 - **A pantalla completa**: con fondo opaco. Tapan el vídeo mientras se sigue oyendo tu voz. Son
   ideales para explicar algo con gráficos o para cubrir momentos en los que no miras a cámara.
 
-CupCut las reproduce en la preview y, al exportar, las convierte en vídeo fotograma a fotograma, así
+El editor las reproduce en la preview y, al exportar, las convierte en vídeo fotograma a fotograma, así
 que el resultado es exactamente lo que ves.
 
 Si quieres escribirlas tú, estas son las reglas:
 
 1. El lienzo mide lo mismo que el proyecto (por defecto 1920×1080).
 2. El fondo es `transparent` (superpuesta) u opaco (pantalla completa).
-3. La duración se declara con `<meta name="cupcut-duration" content="4">`.
-4. Se anima con CSS (`@keyframes`). CupCut controla el reloj, así que la animación se puede
+3. La duración se declara con `<meta name="animation-duration" content="4">`.
+4. Se anima con CSS (`@keyframes`). El editor controla el reloj, así que la animación se puede
    recorrer hacia delante y hacia atrás sin problema.
-5. Para animaciones hechas con JavaScript, define `window.cupcutSeek = (t) => { … }` para que
+5. Para animaciones hechas con JavaScript, define `window.seekAnimation = (t) => { … }` para que
    dibuje el instante `t` en segundos.
 
 Hay un ejemplo completo en [`docs/ejemplo-animacion.html`](docs/ejemplo-animacion.html).
@@ -115,7 +115,7 @@ con muchos fotogramas y su segundo marcado). Así encuentra los tramos en los qu
 o a un lado. Después crea una animación a pantalla completa para cada tramo, con un margen de unos
 0,4 s antes y después, para que el cambio de plano no coincida justo con el movimiento de los ojos.
 
-CupCut no transcribe el audio. Para que las animaciones ilustren lo que dices, pásale a Claude la
+El editor no transcribe el audio. Para que las animaciones ilustren lo que dices, pásale a Claude la
 transcripción o cuéntale de qué hablas en cada parte.
 
 ---
@@ -125,7 +125,7 @@ transcripción o cuéntale de qué hablas en cada parte.
 Claude usa la CLI, pero tú también puedes usarla. Con la app instalada:
 
 ```bash
-"%LOCALAPPDATA%\Programs\CupCut\CupCut.exe" --cli help
+"%LOCALAPPDATA%\Programs\Consigue tu editor de video optimizado para Claude gratis\ConsigueTuEditor.exe" --cli help
 ```
 
 | Comando | Qué hace |
@@ -150,8 +150,8 @@ editarlo.
 Necesitas Node.js 20 o superior.
 
 ```bash
-git clone https://github.com/pinya94/cupcut.git
-cd cupcut
+git clone https://github.com/pinya94/consigue-tu-editor.git
+cd consigue-tu-editor
 npm install
 npm start        # compila la interfaz y abre la app
 npm test         # tests del núcleo

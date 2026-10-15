@@ -1,36 +1,36 @@
-# Proyecto de vídeo CupCut
+# Proyecto de vídeo de "{{NAME}}"
 
-Esta carpeta es un proyecto del editor **CupCut**. El usuario edita en la app visual y tú editas
+Esta carpeta es un proyecto del editor de vídeo **{{NAME}}** (en adelante, "el editor"). El usuario edita en la app visual y tú editas
 por código. Ambos trabajáis sobre el mismo archivo, `proyecto.json`. La app vigila ese archivo y
 muestra cada cambio al momento. Tus cambios se pueden deshacer con Ctrl+Z en la app.
 
-> Este archivo lo genera CupCut y se actualiza solo. Para notas propias del proyecto usa `NOTAS.md`.
+> Este archivo lo genera el editor y se actualiza solo. Para notas propias del proyecto usa `NOTAS.md`.
 
 ## Cómo trabajar
 
 Usa la CLI. Es más segura que tocar el JSON porque valida y lee la duración de los archivos.
 
 ```bash
-{{CUPCUT}} info              # empieza siempre por aquí: pistas, clips con sus ids y medios
-{{CUPCUT}} help              # todos los comandos
+{{EDITOR}} info              # empieza siempre por aquí: pistas, clips con sus ids y medios
+{{EDITOR}} help              # todos los comandos
 ```
 
 Comandos habituales (los tiempos son segundos del timeline; también vale `1:02.5`):
 
 ```bash
-{{CUPCUT}} add media/toma1.mp4                       # al final de la primera pista de vídeo
-{{CUPCUT}} add media/titulo.html --track v2 --at 3   # animación encima, en el segundo 3
-{{CUPCUT}} split 12.4                                # corta todo lo que pase por 12.4
-{{CUPCUT}} trim c3 --start 5.2 --end 9               # mueve los bordes de un clip
-{{CUPCUT}} move c3 20 --track v2
-{{CUPCUT}} set c2 volume=0.3 fit=cover
-{{CUPCUT}} set c5 zoom=1.2 zoomX=0.5 zoomY=0.35      # acercamiento del 20 % hacia la cara
-{{CUPCUT}} delete c4 --ripple                        # borra y cierra el hueco
-{{CUPCUT}} silences c1                               # lista los silencios
-{{CUPCUT}} silences c1 --apply                       # los quita (jump cuts)
-{{CUPCUT}} sheet c1 --every 2                        # hojas de miniaturas para revisar el vídeo
-{{CUPCUT}} frame 12.5 --out .cupcut/f.png            # fotograma compuesto
-{{CUPCUT}} export                                    # MP4 final en export/
+{{EDITOR}} add media/toma1.mp4                       # al final de la primera pista de vídeo
+{{EDITOR}} add media/titulo.html --track v2 --at 3   # animación encima, en el segundo 3
+{{EDITOR}} split 12.4                                # corta todo lo que pase por 12.4
+{{EDITOR}} trim c3 --start 5.2 --end 9               # mueve los bordes de un clip
+{{EDITOR}} move c3 20 --track v2
+{{EDITOR}} set c2 volume=0.3 fit=cover
+{{EDITOR}} set c5 zoom=1.2 zoomX=0.5 zoomY=0.35      # acercamiento del 20 % hacia la cara
+{{EDITOR}} delete c4 --ripple                        # borra y cierra el hueco
+{{EDITOR}} silences c1                               # lista los silencios
+{{EDITOR}} silences c1 --apply                       # los quita (jump cuts)
+{{EDITOR}} sheet c1 --every 2                        # hojas de miniaturas para revisar el vídeo
+{{EDITOR}} frame 12.5 --out .editor/f.png            # fotograma compuesto
+{{EDITOR}} export                                    # MP4 final en export/
 ```
 
 **Para ver el vídeo**: `sheet` genera imágenes con 30 miniaturas cada una y el segundo del timeline
@@ -39,14 +39,14 @@ un instante concreto con todas las capas, animaciones incluidas. Comprueba siemp
 antes de darlo por bueno.
 
 Para cambios grandes también puedes editar `proyecto.json` directamente. Después ejecuta
-`{{CUPCUT}} check` para comprobar que no hay solapes ni errores.
+`{{EDITOR}} check` para comprobar que no hay solapes ni errores.
 
 ## Formato de proyecto.json
 
 ```jsonc
 {
   "name": "Mi vídeo", "width": 1920, "height": 1080, "fps": 30,
-  "assets": { "media/toma1.mp4": { "kind": "video", "duration": 125.4, "hasAudio": true } }, // lo rellena CupCut
+  "assets": { "media/toma1.mp4": { "kind": "video", "duration": 125.4, "hasAudio": true } }, // lo rellena el editor
   "tracks": [                       // de ABAJO a ARRIBA: la última pista de vídeo se ve encima
     { "id": "v1", "kind": "video", "name": "Vídeo 1", "clips": [
       { "id": "c1", "src": "media/toma1.mp4", "start": 0, "in": 2.5, "duration": 10 }
@@ -71,18 +71,18 @@ Para cambios grandes también puedes editar `proyecto.json` directamente. Despu�
 
 ## Animaciones (HTML)
 
-Las animaciones son archivos `.html` en `media/`. CupCut los pinta encima del vídeo, tanto en la
+Las animaciones son archivos `.html` en `media/`. El editor los pinta encima del vídeo, tanto en la
 preview como en la exportación (fotograma a fotograma).
 
 Reglas:
 1. El lienzo mide lo mismo que el proyecto (p. ej. `1920x1080`).
    - **Superpuesta** (rótulos, flechas, textos encima de la persona): fondo `transparent`.
    - **A pantalla completa** (tapa el vídeo): fondo opaco que cubra todo el lienzo.
-2. Declara la duración: `<meta name="cupcut-duration" content="4">`.
-3. Anima con **CSS** (`@keyframes`, `animation`) o con la Web Animations API. CupCut controla el
+2. Declara la duración: `<meta name="animation-duration" content="4">`.
+3. Anima con **CSS** (`@keyframes`, `animation`) o con la Web Animations API. El editor controla el
    reloj, así que no hace falta nada más. El segundo 0 del archivo es el inicio del clip.
 4. Si animas con JS (canvas, GSAP…), no uses `requestAnimationFrame` ni temporizadores para
-   avanzar el tiempo. Define `window.cupcutSeek = (t) => { /* pinta el estado del segundo t */ }`.
+   avanzar el tiempo. Define `window.seekAnimation = (t) => { /* pinta el estado del segundo t */ }`.
    Debe ser determinista: el mismo `t` siempre da la misma imagen.
 5. Todo en local, sin CDNs: fuentes y librerías dentro de `media/`, con rutas relativas.
 6. Pon las animaciones en una pista por encima del vídeo (`v2`; si hace falta, crea otra con
@@ -94,7 +94,7 @@ Ejemplo mínimo (superpuesta):
 
 ```html
 <!doctype html>
-<html><head><meta charset="utf-8"><meta name="cupcut-duration" content="3">
+<html><head><meta charset="utf-8"><meta name="animation-duration" content="3">
 <style>
   html, body { margin: 0; width: 1920px; height: 1080px; background: transparent; overflow: hidden; }
   h1 { position: absolute; left: 120px; bottom: 140px; margin: 0; color: #fff; font: 800 84px 'Segoe UI';
@@ -104,7 +104,7 @@ Ejemplo mínimo (superpuesta):
 <body><h1>Título</h1></body></html>
 ```
 
-Después: `{{CUPCUT}} add media/titulo.html --track v2 --at 3`. Comprueba cómo queda con `frame` y
+Después: `{{EDITOR}} add media/titulo.html --track v2 --at 3`. Comprueba cómo queda con `frame` y
 mirando el PNG.
 
 ## Recetas
@@ -123,7 +123,7 @@ Para remarcar una frase importante, usa un zoom mayor (1.3) en ese clip.
    Junta los tramos separados por menos de 1 s.
 2. A cada tramo añádele margen: empieza un poco antes y acaba un poco después. Por defecto,
    **0,4 s antes y 0,4 s después**, para que el cambio no coincida con el movimiento de los ojos.
-3. Decide el contenido según lo que se dice en ese tramo. CupCut no transcribe el audio: usa una
+3. Decide el contenido según lo que se dice en ese tramo. El editor no transcribe el audio: usa una
    transcripción si el usuario te la da, o pregúntale qué dice ahí. Crea una animación
    **a pantalla completa** (fondo opaco) que ilustre lo que está diciendo. Dale la duración exacta
    del tramo con margen.

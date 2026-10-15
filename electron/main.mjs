@@ -7,7 +7,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { startMediaServer } from './server.mjs';
 import { makeHtmlRenderer } from './htmlRender.mjs';
-import { loadProject, saveProject, initProject, syncAssets, toSrc, probe, clipSilences, projectFile, findProjectDir, serialize, writeProjectGuide } from '../core/media.mjs';
+import { APP_NAME, loadProject, saveProject, initProject, syncAssets, toSrc, probe, clipSilences, projectFile, findProjectDir, serialize, writeProjectGuide } from '../core/media.mjs';
 import { exportProject, exportFrame } from '../core/export.mjs';
 import { findClip, kindOf, parseTime, PROJECT_FILE } from '../core/project.mjs';
 
@@ -25,11 +25,15 @@ function configPath() {
   return path.join(app.getPath('userData'), 'config.json');
 }
 function readConfig() {
-  try {
-    return JSON.parse(fs.readFileSync(configPath(), 'utf8'));
-  } catch {
-    return { recent: [] };
+  // la primera vez se recuperan los proyectos recientes de cuando la app se llamaba "cupcut"
+  const old = path.join(app.getPath('appData'), 'cupcut', 'config.json');
+  const aux = cliMode || process.env.EDITOR_SNAPSHOT;
+  for (const f of aux ? [configPath()] : [configPath(), old]) {
+    try {
+      return JSON.parse(fs.readFileSync(f, 'utf8'));
+    } catch {}
   }
+  return { recent: [] };
 }
 function rememberProject(dir) {
   const cfg = readConfig();
@@ -60,7 +64,7 @@ async function openProject(dir) {
   } catch {}
   watch(dir);
   rememberProject(dir);
-  win?.setTitle(`${p.name} — CupCut`);
+  win?.setTitle(`${p.name} — ${APP_NAME}`);
   return { dir, project: p };
 }
 
@@ -114,7 +118,7 @@ function createWindow() {
     minWidth: 1000,
     minHeight: 650,
     backgroundColor: '#15161a',
-    title: 'CupCut',
+    title: APP_NAME,
     autoHideMenuBar: true,
     webPreferences: { preload: path.join(here, 'preload.cjs'), contextIsolation: true, sandbox: false },
   });
@@ -123,20 +127,20 @@ function createWindow() {
     if (input.type === 'keyDown' && input.key === 'F12') win.webContents.toggleDevTools();
     if (input.type === 'keyDown' && input.key === 'F5') win.webContents.reload();
   });
-  if (process.env.CUPCUT_DEV_URL) win.loadURL(process.env.CUPCUT_DEV_URL);
+  if (process.env.EDITOR_DEV_URL) win.loadURL(process.env.EDITOR_DEV_URL);
   else win.loadFile(path.join(here, '..', 'dist', 'index.html'));
 
-  // Para revisar la interfaz sin mirar la pantalla: CUPCUT_SNAPSHOT=captura.png electron . --project <dir>
-  // Opcionalmente CUPCUT_SNAPSHOT_JS ejecuta código en la interfaz antes de la captura.
-  if (process.env.CUPCUT_SNAPSHOT) {
+  // Para revisar la interfaz sin mirar la pantalla: EDITOR_SNAPSHOT=captura.png electron . --project <dir>
+  // Opcionalmente EDITOR_SNAPSHOT_JS ejecuta código en la interfaz antes de la captura.
+  if (process.env.EDITOR_SNAPSHOT) {
     win.webContents.once('did-finish-load', async () => {
       await new Promise((r) => setTimeout(r, 2500));
-      if (process.env.CUPCUT_SNAPSHOT_JS) {
-        await win.webContents.executeJavaScript(process.env.CUPCUT_SNAPSHOT_JS).catch((e) => console.error(e));
+      if (process.env.EDITOR_SNAPSHOT_JS) {
+        await win.webContents.executeJavaScript(process.env.EDITOR_SNAPSHOT_JS).catch((e) => console.error(e));
         await new Promise((r) => setTimeout(r, 1500));
       }
       const img = await win.webContents.capturePage();
-      fs.writeFileSync(path.resolve(process.env.CUPCUT_SNAPSHOT), img.toPNG());
+      fs.writeFileSync(path.resolve(process.env.EDITOR_SNAPSHOT), img.toPNG());
       app.exit(0);
     });
   }
@@ -228,8 +232,8 @@ function registerIpc() {
 }
 
 // ---------- Modo CLI (sin ventana) ----------
-// CupCut.exe --cli <comando> ...   (en desarrollo: electron . --cli <comando> ...)
-// export y frame necesitan Chromium para las animaciones y se resuelven aquí; el resto lo hace cli/cupcut.mjs.
+// ConsigueTuEditor.exe --cli <comando> ...   (en desarrollo: electron . --cli <comando> ...)
+// export y frame necesitan Chromium para las animaciones y se resuelven aquí; el resto lo hace cli/editor.mjs.
 
 function arg(name) {
   const i = process.argv.indexOf('--' + name);
@@ -240,7 +244,7 @@ async function runCli() {
   const args = process.argv.slice(process.argv.indexOf('--cli') + 1);
   const cmd = args[0];
   if (cmd !== 'export' && cmd !== 'frame') {
-    const { run } = await import('../cli/cupcut.mjs');
+    const { run } = await import('../cli/editor.mjs');
     await run(args);
     return;
   }
@@ -262,7 +266,7 @@ async function runCli() {
     });
     console.log(`Exportado: ${out}`);
   } else if (cmd === 'frame') {
-    const out = path.resolve(arg('out') || path.join(dir, '.cupcut', 'frame.png'));
+    const out = path.resolve(arg('out') || path.join(dir, '.editor', 'frame.png'));
     await exportFrame({ dir, project: p, t: parseTime(arg('time') || args[1] || '0'), out, renderHtmlFrame });
     console.log(`Fotograma: ${out}`);
   } else {
@@ -274,7 +278,7 @@ async function runCli() {
 
 // La CLI y las capturas usan su propia carpeta de datos: así no chocan con la app abierta
 // ni cambian la lista de proyectos recientes.
-if (cliMode || process.env.CUPCUT_SNAPSHOT) app.setPath('userData', path.join(os.tmpdir(), 'cupcut-aux'));
+if (cliMode || process.env.EDITOR_SNAPSHOT) app.setPath('userData', path.join(os.tmpdir(), 'editor-aux'));
 if (cliMode) app.disableHardwareAcceleration();
 
 app.whenReady().then(async () => {

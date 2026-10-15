@@ -9,7 +9,7 @@ function on(channel) {
   };
 }
 
-contextBridge.exposeInMainWorld('cupcut', {
+contextBridge.exposeInMainWorld('editor', {
   info: () => ipcRenderer.invoke('app:info'),
   openProject: (dir) => ipcRenderer.invoke('project:open', dir),
   newProject: (opts) => ipcRenderer.invoke('project:new', opts),

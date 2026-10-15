@@ -24,7 +24,7 @@ async function openPage(url, width, height) {
 
 async function captureAt(win, t, width, height) {
   await win.webContents.executeJavaScript(
-    `window.__cupcutSeek && window.__cupcutSeek(${t}); new Promise(r => requestAnimationFrame(() => requestAnimationFrame(() => r(true))))`,
+    `window.__seekAnimation && window.__seekAnimation(${t}); new Promise(r => requestAnimationFrame(() => requestAnimationFrame(() => r(true))))`,
   );
   let img = await win.webContents.capturePage();
   const s = img.getSize();

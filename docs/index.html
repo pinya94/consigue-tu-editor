@@ -3,8 +3,8 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-<title>CupCut</title>
-<meta name="description" content="Editor de vídeo de escritorio para editar a medias con Claude. Gratis, para Windows." />
+<title>Consigue tu editor de vídeo optimizado para Claude gratis</title>
+<meta name="description" content="Editor de vídeo de escritorio para editar a medias con Claude. Gratis, para Windows. De Consigue tu algo gratis." />
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,800&family=Figtree:wght@400;600&family=JetBrains+Mono:wght@400;600&display=swap" />
@@ -59,7 +59,7 @@
 
   /* cabecera */
   .top { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
-  .brand { font: 800 22px var(--f-display); letter-spacing: -0.03em; text-decoration: none; }
+  .brand { font: 800 19px var(--f-display); letter-spacing: -0.03em; text-decoration: none; }
   .brand span { color: var(--accent); }
   .top nav { display: flex; gap: 20px; font-size: 15px; }
   .top nav a { text-decoration: none; color: var(--muted); }
@@ -67,7 +67,8 @@
 
   /* hero */
   .hero { display: flex; flex-direction: column; gap: 28px; }
-  .hero h1 { font-size: clamp(44px, 8.5vw, 92px); font-weight: 800; line-height: 0.95; }
+  .hero h1 { font-size: clamp(36px, 6.4vw, 72px); font-weight: 800; line-height: 1; }
+  .tagline { font: 500 clamp(20px, 2.6vw, 26px) var(--f-display); margin-top: -10px; }
   .hero h1 em { font-style: normal; color: var(--accent); }
   .lead { font-size: clamp(18px, 2.2vw, 21px); max-width: 60ch; color: var(--muted); }
   .cta { display: flex; flex-wrap: wrap; align-items: center; gap: 14px 22px; }
@@ -147,7 +148,7 @@
 <body>
 <div class="wrap">
   <header class="top">
-    <a class="brand" href="#">Cup<span>Cut</span></a>
+    <a class="brand" href="#">Consigue tu editor <span>gratis</span></a>
     <nav>
       <a href="#como">Cómo funciona</a>
       <a href="#claude">Con Claude</a>
@@ -156,9 +157,10 @@
   </header>
 
   <main class="hero">
-    <h1>Tú cortas.<br /><em>Claude</em> hace el resto.</h1>
+    <h1>Consigue tu editor de vídeo <em>optimizado para Claude</em> gratis</h1>
+    <p class="tagline">Tú cortas. Claude hace el resto.</p>
     <p class="lead">
-      CupCut es un editor de vídeo de escritorio, sencillo y gratuito, pensado para editar a medias con Claude.
+      Es un editor de vídeo de escritorio, sencillo y gratuito, pensado para editar a medias con Claude.
       Tú montas el vídeo con el ratón. Claude quita silencios, mete zooms y crea animaciones sobre el mismo
       proyecto, y lo ves aparecer en tu pantalla al momento.
     </p>
@@ -170,7 +172,7 @@
       <small>Gratis · instalador de ~150 MB · FFmpeg incluido</small>
     </div>
 
-    <div class="tl" aria-label="Ejemplo de timeline de CupCut">
+    <div class="tl" aria-label="Ejemplo de timeline del editor">
       <div class="tl-head">
         <span>entrevista.mp4 · 1920×1080 · 30 fps</span>
         <span><b>00:00:42:18</b> / 00:03:10:00</span>
@@ -195,7 +197,7 @@
         </div>
         <div class="playhead" aria-hidden="true"></div>
       </div>
-      <div class="tl-cmd"><span>claude ›</span> cupcut silences c5 --apply &nbsp;·&nbsp; 2 silencios quitados (1.8 s)</div>
+      <div class="tl-cmd"><span>claude ›</span> silences c5 --apply &nbsp;·&nbsp; 2 silencios quitados (1.8 s)</div>
     </div>
   </main>
 
@@ -216,7 +218,7 @@
       <div class="feature">
         <span class="label">HTML + CSS</span>
         <h3>Animaciones hechas con código</h3>
-        <p>Rótulos con transparencia o animaciones a pantalla completa. Claude las escribe y CupCut las pinta encima del vídeo.</p>
+        <p>Rótulos con transparencia o animaciones a pantalla completa. Claude las escribe y el editor las pinta encima del vídeo.</p>
       </div>
       <div class="feature">
         <span class="label">−35 dB</span>
@@ -240,10 +242,10 @@
     <span class="label">Empezar</span>
     <h2>De cero a editar con Claude</h2>
     <ol class="steps">
-      <li><div><h3>Instala CupCut</h3><p>Descarga el instalador y ábrelo. Si Windows avisa de que la app no está firmada, pulsa <em>Más información → Ejecutar de todas formas</em>.</p></div></li>
-      <li><div><h3>Crea un proyecto</h3><p>Pulsa <em>Nuevo proyecto</em>, elige una carpeta vacía y arrastra tus vídeos al timeline. CupCut deja en la carpeta un <code>CLAUDE.md</code> con todo lo que Claude necesita saber.</p></div></li>
+      <li><div><h3>Instala el editor</h3><p>Descarga el instalador y ábrelo. Si Windows avisa de que la app no está firmada, pulsa <em>Más información → Ejecutar de todas formas</em>.</p></div></li>
+      <li><div><h3>Crea un proyecto</h3><p>Pulsa <em>Nuevo proyecto</em>, elige una carpeta vacía y arrastra tus vídeos al timeline. El editor deja en la carpeta un <code>CLAUDE.md</code> con todo lo que Claude necesita saber.</p></div></li>
       <li><div><h3>Abre Claude en esa carpeta</h3><p>Clic derecho en la carpeta → <em>Abrir en Terminal</em> → escribe <code>claude</code>. Necesitas <a href="https://claude.com/claude-code">Claude Code</a>.</p></div></li>
-      <li><div><h3>Pide lo que quieras</h3><p>Con CupCut abierto delante, verás los cambios en directo. Si algo no te gusta, Ctrl+Z.</p></div></li>
+      <li><div><h3>Pide lo que quieras</h3><p>Con el editor abierto delante, verás los cambios en directo. Si algo no te gusta, Ctrl+Z.</p></div></li>
     </ol>
     <div class="prompts">
       <div class="prompt">Quita todos los silencios del vídeo principal.</div>
@@ -258,20 +260,20 @@
     <div class="req"><span><b>Windows</b> 10 u 11</span><span><b>Claude Code</b> para la parte con Claude</span><span><b>Código abierto</b></span></div>
     <a class="btn download-link" href="#">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4v12m0 0-5-5m5 5 5-5M5 20h14" /></svg>
-      Descargar CupCut
+      Descargar el editor gratis
     </a>
   </section>
 
   <footer>
-    <span>CupCut · editor de vídeo para trabajar con Claude</span>
+    <span>Un regalo de <b>Consigue tu algo gratis</b></span>
     <a class="repo-link" href="#">Código y documentación en GitHub</a>
   </footer>
 </div>
 <script>
   // Repositorio de GitHub donde se publican las versiones.
-  const REPO = 'pinya94/cupcut';
+  const REPO = 'pinya94/consigue-tu-editor';
   const base = 'https://github.com/' + REPO;
-  document.querySelectorAll('.download-link').forEach((a) => (a.href = base + '/releases/latest/download/CupCut-Setup.exe'));
+  document.querySelectorAll('.download-link').forEach((a) => (a.href = base + '/releases/latest/download/ConsigueTuEditor-Setup.exe'));
   document.querySelectorAll('.repo-link').forEach((a) => (a.href = base));
 </script>
 </body>

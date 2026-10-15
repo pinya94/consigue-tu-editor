@@ -39,9 +39,9 @@ export function App() {
   return (
     <div className="welcome">
       <h1>
-        Cup<span>Cut</span>
+        Consigue tu editor de vídeo <span>optimizado para Claude</span> gratis
       </h1>
-      <p className="muted">Editor de vídeo para trabajar a medias con Claude</p>
+      <p className="muted">Tú cortas. Claude hace el resto.</p>
       <div className="welcome-buttons">
         <button className="primary" onClick={() => run(() => api.newProject())}>
           Nuevo proyecto

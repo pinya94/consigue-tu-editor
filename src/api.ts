@@ -6,7 +6,7 @@ export interface ExportProgress {
   value: number;
 }
 
-export interface CupcutApi {
+export interface EditorApi {
   info(): Promise<{ mediaBase: string; recent: string[]; openOnStart: string | null }>;
   openProject(dir?: string): Promise<{ dir: string; project: Project } | null>;
   newProject(opts?: { name?: string }): Promise<{ dir: string; project: Project } | null>;
@@ -24,11 +24,11 @@ export interface CupcutApi {
 
 declare global {
   interface Window {
-    cupcut: CupcutApi;
+    editor: EditorApi;
   }
 }
 
-export const api = window.cupcut;
+export const api = window.editor;
 
 // URL del servidor local para un src del proyecto.
 export function mediaUrl(base: string, dir: string, src: string, version?: number) {

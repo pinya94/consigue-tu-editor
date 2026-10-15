@@ -1,4 +1,6 @@
-# CupCut (código del editor)
+# Código de "Consigue tu editor de vídeo optimizado para Claude gratis"
+
+Nombre técnico corto: `consigue-tu-editor` (repo, paquete) / `ConsigueTuEditor.exe`.
 
 Editor de vídeo de escritorio pensado para editar a medias con Claude. Usa Electron, React,
 TypeScript y FFmpeg (binarios de `ffmpeg-static` y `ffprobe-static`). La UI está en español.
@@ -13,13 +15,13 @@ TypeScript y FFmpeg (binarios de `ffmpeg-static` y `ffprobe-static`). La UI est�
 - `electron/server.mjs`: servidor HTTP local con Range. Inyecta `anim-runtime.js` en los HTML.
 - `electron/htmlRender.mjs`: renderiza las animaciones HTML fotograma a fotograma, con alfa (ventana offscreen).
 - `src/`: interfaz React (Editor, Timeline, Preview, Panels). `clock.ts` es el reloj de reproducción, fuera de React.
-- `cli/cupcut.mjs`: CLI para Claude.
+- `cli/editor.mjs`: CLI para Claude.
 - `docs/CLAUDE-proyecto.md`: plantilla que `init` copia como `CLAUDE.md` en cada proyecto de vídeo.
 
 ## Comandos
 
 - `npm start`: compila la UI y abre la app. `npm run dev`: modo con recarga en caliente.
 - `npm test`: tests del núcleo. `npm run typecheck`: TypeScript.
-- Revisar la UI sin pantalla: `CUPCUT_SNAPSHOT=captura.png npx electron . --project ejemplo`
-  (opcional: `CUPCUT_SNAPSHOT_JS="__cupcut.clock.seek(2)"`). Requiere antes `npx vite build`.
+- Revisar la UI sin pantalla: `EDITOR_SNAPSHOT=captura.png npx electron . --project ejemplo`
+  (opcional: `EDITOR_SNAPSHOT_JS="__editor.clock.seek(2)"`). Requiere antes `npx vite build`.
 - `ejemplo/` es un proyecto de prueba (está en .gitignore).

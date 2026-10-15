@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// CLI de CupCut: pensada para que Claude edite proyectos sin abrir la interfaz.
+// CLI del editor ("Consigue tu editor de vídeo optimizado para Claude gratis"): pensada para que Claude edite proyectos sin abrir la interfaz.
 // Todo lo que hace se refleja al momento en la app si el proyecto está abierto.
 import path from 'node:path';
 import fs from 'node:fs';
@@ -12,9 +12,10 @@ import { findProjectDir, loadProject, saveProject, initProject, syncAssets, toSr
 const here = path.dirname(fileURLToPath(import.meta.url));
 const appRoot = path.resolve(here, '..');
 
-const HELP = `CupCut — edición de vídeo desde la terminal
+const HELP = `Consigue tu editor de vídeo optimizado para Claude gratis — edición de vídeo desde la terminal
 
-Uso: cupcut <comando> [opciones]      (--project <carpeta> si no estás dentro del proyecto)
+Uso: <comando> [opciones]      (--project <carpeta> si no estás dentro del proyecto)
+     (instalado: ConsigueTuEditor.exe --cli <comando> · desarrollo: node cli/editor.mjs <comando>)
 
 Proyecto
   init [carpeta] [--name N] [--width 1920] [--height 1080] [--fps 30]
@@ -74,7 +75,7 @@ function fail(msg) {
 
 function projectDir() {
   const dir = flags.project ? path.resolve(flags.project) : findProjectDir();
-  if (!dir || !fs.existsSync(path.join(dir, P.PROJECT_FILE))) fail('No hay proyecto.json aquí. Usa --project <carpeta> o "cupcut init".');
+  if (!dir || !fs.existsSync(path.join(dir, P.PROJECT_FILE))) fail('No hay proyecto.json aquí. Usa --project <carpeta> o el comando init.');
   return dir;
 }
 
@@ -146,7 +147,7 @@ function runElectron(args) {
 }
 
 // ---------- comandos ----------
-// Se puede llamar desde Node (node cli/cupcut.mjs ...) o desde la app instalada (CupCut.exe --cli ...).
+// Se puede llamar desde Node (node cli/editor.mjs ...) o desde la app instalada (ConsigueTuEditor.exe --cli ...).
 export async function run(argv) {
   parseArgs(argv);
   try {
@@ -286,7 +287,7 @@ async function main() {
         every,
         from: flags.from !== undefined ? time(flags.from) : undefined,
         to: flags.to !== undefined ? time(flags.to) : undefined,
-        out: path.join(dir, '.cupcut', 'sheets', f.clip.id),
+        out: path.join(dir, '.editor', 'sheets', f.clip.id),
       });
       console.log(`${pages.length} hojas de ${f.clip.id} (una miniatura cada ${every}s, 6x5 por hoja, el número es el segundo del timeline):`);
       for (const pg of pages) console.log(`  ${pg.file}  (${s3(pg.from)} → ${s3(pg.to)})`);
@@ -302,7 +303,7 @@ async function main() {
 
     case 'frame': {
       const dir = projectDir();
-      const out = path.resolve(flags.out && flags.out !== true ? flags.out : path.join(dir, '.cupcut', `frame-${pos[0] || 0}.png`));
+      const out = path.resolve(flags.out && flags.out !== true ? flags.out : path.join(dir, '.editor', `frame-${pos[0] || 0}.png`));
       process.exit(await runElectron(['frame', '--project', dir, '--time', String(pos[0] || 0), '--out', out]));
     }
 
@@ -314,7 +315,7 @@ async function main() {
     }
 
     default:
-      fail(`Comando desconocido "${cmd}". Usa "cupcut help".`);
+      fail(`Comando desconocido "${cmd}". Usa el comando help.`);
   }
 }
 

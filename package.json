@@ -1,21 +1,21 @@
 {
-  "name": "cupcut",
+  "name": "consigue-tu-editor",
   "version": "0.1.0",
-  "description": "Editor de vídeo de escritorio pensado para trabajar a medias con Claude",
+  "description": "Consigue tu editor de vídeo optimizado para Claude gratis: editor de vídeo de escritorio para editar a medias con Claude",
   "main": "electron/main.mjs",
   "type": "module",
   "bin": {
-    "cupcut": "cli/cupcut.mjs"
+    "consigue-tu-editor": "cli/editor.mjs"
   },
   "scripts": {
-    "dev": "concurrently -k \"vite\" \"wait-on tcp:5173 && cross-env CUPCUT_DEV_URL=http://localhost:5173 electron .\"",
+    "dev": "concurrently -k \"vite\" \"wait-on tcp:5173 && cross-env EDITOR_DEV_URL=http://localhost:5173 electron .\"",
     "build": "vite build",
     "start": "vite build && electron .",
     "app": "electron .",
     "typecheck": "tsc --noEmit",
-    "cupcut": "node cli/cupcut.mjs",
     "test": "node --test \"test/**/*.test.mjs\"",
-    "dist": "vite build && electron-builder --win"
+    "dist": "vite build && electron-builder --win",
+    "cli": "node cli/editor.mjs"
   },
   "dependencies": {
     "ffmpeg-static": "^5.3.0",
@@ -35,10 +35,10 @@
     "vite": "^8.3.4",
     "wait-on": "^9.5.1"
   },
-  "author": "CupCut",
+  "author": "Consigue tu algo gratis",
   "build": {
-    "appId": "app.cupcut.editor",
-    "productName": "CupCut",
+    "appId": "com.consiguetualgogratis.editor",
+    "productName": "Consigue tu editor de video optimizado para Claude gratis",
     "directories": {
       "output": "release"
     },
@@ -60,13 +60,15 @@
     "win": {
       "target": [
         "nsis"
-      ]
+      ],
+      "executableName": "ConsigueTuEditor"
     },
     "nsis": {
       "oneClick": true,
       "perMachine": false,
-      "artifactName": "CupCut-Setup.exe",
-      "shortcutName": "CupCut"
+      "artifactName": "ConsigueTuEditor-Setup.exe",
+      "shortcutName": "Consigue tu editor de vídeo optimizado para Claude gratis",
+      "uninstallDisplayName": "Consigue tu editor de vídeo optimizado para Claude gratis"
     }
   }
 }

@@ -178,7 +178,7 @@ export function Timeline(props: Props) {
   const onDrop = (e: React.DragEvent) => {
     e.preventDefault();
     const lane = (e.target as HTMLElement).closest('[data-track]') as HTMLElement | null;
-    const src = e.dataTransfer.getData('application/x-cupcut-src');
+    const src = e.dataTransfer.getData('application/x-editor-src');
     const files = Array.from(e.dataTransfer.files);
     props.onDrop({ trackId: lane?.dataset.track || null, time: timeFromClientX(e.clientX), src: src || undefined, files: files.length ? files : undefined });
   };

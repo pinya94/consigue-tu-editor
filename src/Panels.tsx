@@ -32,7 +32,7 @@ function BinItem({ src, asset, onAdd }: { src: string; asset: Asset; onAdd(src: 
       className={`bin-item ${asset.missing ? 'missing' : ''}`}
       draggable={!asset.missing}
       onDragStart={(e) => {
-        e.dataTransfer.setData('application/x-cupcut-src', src);
+        e.dataTransfer.setData('application/x-editor-src', src);
         e.dataTransfer.effectAllowed = 'copy';
       }}
       onDoubleClick={() => !asset.missing && onAdd(src)}

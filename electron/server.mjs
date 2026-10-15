@@ -32,7 +32,7 @@ export async function startMediaServer() {
       }
       const rest = url.pathname.slice(prefix.length);
       let file;
-      if (rest === '/__cupcut/runtime.js') file = runtimePath;
+      if (rest === '/__editor/runtime.js') file = runtimePath;
       else if (rest.startsWith('/fs/')) file = path.normalize(rest.slice(4).split('/').map(decodeURIComponent).join('/'));
       else {
         res.writeHead(404).end();
@@ -51,7 +51,7 @@ export async function startMediaServer() {
       };
       if (ext === '.html' || ext === '.htm') {
         let html = fs.readFileSync(file, 'utf8');
-        const tag = `<script src="${prefix}/__cupcut/runtime.js"></script>`;
+        const tag = `<script src="${prefix}/__editor/runtime.js"></script>`;
         html = /<head[^>]*>/i.test(html) ? html.replace(/<head[^>]*>/i, (m) => m + tag) : tag + html;
         res.writeHead(200, headers).end(html);
         return;
