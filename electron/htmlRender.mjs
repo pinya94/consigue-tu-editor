@@ -6,11 +6,11 @@ import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { spawn } from 'node:child_process';
-import { BrowserWindow } from 'electron';
+import { BrowserWindow, nativeImage } from 'electron';
 import { ffmpegPath, CACHE_DIR, resolveSrc } from '../core/media.mjs';
 import { detectEncoder, videoCodecArgs } from '../core/export.mjs';
 
-const CACHE_VERSION = 'v2';
+const CACHE_VERSION = 'v4';
 
 async function openPage(url, width, height) {
   const win = new BrowserWindow({
@@ -18,22 +18,67 @@ async function openPage(url, width, height) {
     width,
     height,
     useContentSize: true,
+    // sin esto Windows recorta la ventana al tamaño de la pantalla (p. ej. 1920×1040)
+    enableLargerThanScreen: true,
     frame: false,
     transparent: true,
     backgroundColor: '#00000000',
     webPreferences: { offscreen: true, backgroundThrottling: false },
   });
+  win.setContentSize(width, height);
   await win.loadURL(url);
   await win.webContents.executeJavaScript('document.fonts.ready.then(() => true)');
+  // Recién abierta, la ventana invisible devuelve capturas vacías durante unos 150 ms por mucho
+  // que se repinte: se calienta con varios pintados y una captura descartada.
+  for (let i = 0; i < 8; i++) await paintOnce(win);
+  await captureAt(win, 0, width, height);
   return win;
 }
 
+// La ventana invisible no repinta sola tras un salto de tiempo, y cada pintado entrega el estado
+// anterior: hay que forzar dos pintados para que la captura muestre el instante pedido.
+async function repaint(win) {
+  await paintOnce(win);
+  await paintOnce(win);
+}
+
+function paintOnce(win) {
+  return new Promise((resolve) => {
+    const timer = setTimeout(resolve, 300);
+    win.webContents.once('paint', () => {
+      clearTimeout(timer);
+      resolve();
+    });
+    win.webContents.invalidate();
+  });
+}
+
+// Cada captura marca la página con un "testigo": un píxel de color único en la esquina. Se repinta
+// hasta que la captura trae ese color, así nunca se guarda un fotograma atrasado o vacío.
+let token = 0;
 async function captureAt(win, t, width, height) {
-  await win.webContents.executeJavaScript(
-    `window.__seekAnimation && window.__seekAnimation(${t}); new Promise(r => requestAnimationFrame(() => requestAnimationFrame(() => r(true))))`,
-  );
-  let img = await win.webContents.capturePage();
+  token = (token % 250) + 1;
+  await win.webContents.executeJavaScript(`(function(){
+    window.__seekAnimation && window.__seekAnimation(${t});
+    var m = document.getElementById('__testigo');
+    if (!m) { m = document.createElement('div'); m.id = '__testigo';
+      m.style.cssText = 'position:fixed;left:0;top:0;width:2px;height:2px;z-index:2147483647;pointer-events:none';
+      document.documentElement.appendChild(m); }
+    m.style.background = 'rgb(${token},0,${255 - token})';
+    return new Promise(function (r) { requestAnimationFrame(function () { requestAnimationFrame(function () { r(true); }); }); });
+  })()`);
+  let img;
+  for (let i = 0; i < 40; i++) {
+    await paintOnce(win);
+    img = await win.webContents.capturePage();
+    const b = img.toBitmap(); // BGRA
+    if (b.length && b[2] === token && b[0] === 255 - token && b[3] === 255) break;
+  }
   const s = img.getSize();
+  // el testigo se borra copiando los píxeles de al lado
+  const buf = Buffer.from(img.toBitmap());
+  for (let y = 0; y < 2; y++) for (let x = 0; x < 2; x++) buf.copy(buf, (y * s.width + x) * 4, (y * s.width + 2) * 4, (y * s.width + 3) * 4);
+  img = nativeImage.createFromBitmap(buf, { width: s.width, height: s.height });
   if (s.width !== width || s.height !== height) img = img.resize({ width, height, quality: 'best' });
   return img;
 }
