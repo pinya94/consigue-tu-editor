@@ -14,7 +14,7 @@ que las crea como animaciones.
 
 ## Descargar e instalar (Windows)
 
-1. Descarga `CupCut-Setup-x.y.z.exe` de la página de [**Releases**](../../releases/latest).
+1. Descarga `CupCut-Setup-x.y.z.exe` de la página de [**Releases**](https://github.com/pinya94/cupcut/releases/latest).
 2. Ábrelo. Se instala en tu usuario, sin pedir permisos de administrador, y crea un acceso directo.
 3. Windows puede mostrar el aviso *"Windows protegió su PC"*, porque la app no está firmada. Pulsa
    **Más información → Ejecutar de todas formas**.
@@ -148,7 +148,7 @@ editarlo.
 Necesitas Node.js 20 o superior.
 
 ```bash
-git clone <este repositorio>
+git clone https://github.com/pinya94/cupcut.git
 cd cupcut
 npm install
 npm start        # compila la interfaz y abre la app
