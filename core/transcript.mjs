@@ -207,7 +207,13 @@ export function refineWords(words, mask, rate = FRAME_RATE, { gap = 0.15 } = {})
 // paréntesis o corchetes. Una palabra suelta sin voz se queda (puede ser una palabra dicha muy bajo).
 export function dropHallucinations(words) {
   // (las cachés antiguas tienen "Pero,¿para": el signo de apertura pasa a la palabra siguiente)
-  words = words.map((w) => ({ ...w }));
+  // ("Pero,¿para" pegadas en una: se separan, repartiendo el tiempo por letras)
+  words = words.flatMap((w) => {
+    const m = w.w.match(/^(.+?[.,;:])([¿¡«“"(].+)$/);
+    if (!m) return [{ ...w }];
+    const cut = Math.round((w.start + ((w.end - w.start) * m[1].length) / w.w.length) * 1000) / 1000;
+    return [{ ...w, w: m[1], end: cut }, { ...w, w: m[2], start: cut }];
+  });
   for (let i = 0; i < words.length - 1; i++) {
     const m = words[i].w.match(/^(.*[^¿¡«“"(])([¿¡«“"(]+)$/);
     if (m) {
@@ -556,7 +562,15 @@ export function diffWords(expected, heard, { maxGap = 3 } = {}) {
   }
   close();
   // pequeñas diferencias de una palabra suelen ser errores de whisper: se marcan como leves
-  return diffs.map((d) => ({ ...d, minor: d.expected.length + d.heard.length <= 2 && Math.max(d.expected.length, d.heard.length) <= 1, big: d.expected.length > maxGap || d.heard.length > maxGap }));
+  // se compara todo junto, letra a letra: "180.000" y "180 mil", o "valoraré" y "valorar es", son casi iguales
+  const canon = (list) => list.map(normalizeWord).join('').replace(/(\d+)mil/g, '$1000');
+  return diffs.map((d) => {
+    const a = canon(d.expected);
+    const b = canon(d.heard);
+    const near = a.length > 0 && b.length > 0 && editDistance(a, b) <= Math.max(1, Math.floor(Math.max(a.length, b.length) * 0.3));
+    const minor = near || (d.expected.length + d.heard.length <= 2 && Math.max(d.expected.length, d.heard.length) <= 1);
+    return { ...d, minor, big: d.expected.length > maxGap || d.heard.length > maxGap };
+  });
 }
 
 // Problemas de los cortes del montaje: palabras partidas y cortes sin silencio.

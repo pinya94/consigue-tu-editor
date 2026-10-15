@@ -103,13 +103,14 @@ test('quita lo que whisper se inventa en los silencios', () => {
     { w: 'hola', start: 0, end: 0.3 },
     { w: 'bajito', start: 0.5, end: 0.8, doubt: true },
     { w: 'adiós.¿', start: 1, end: 1.3 },
+    { w: 'Pero,¿para', start: 1.3, end: 1.35 },
     { w: 'vale?', start: 1.4, end: 1.6 },
     { w: '(Silencio)', start: 5, end: 9 },
     { w: '¡Gracias', start: 20, end: 20.3, doubt: true },
     { w: 'por', start: 20.3, end: 20.5, doubt: true },
     { w: 'ver!', start: 20.5, end: 20.8, doubt: true },
   ];
-  assert.deepEqual(dropHallucinations(w).map((x) => x.w), ['hola', 'bajito', 'adiós.', '¿vale?']);
+  assert.deepEqual(dropHallucinations(w).map((x) => x.w), ['hola', 'bajito', 'adiós.', '¿Pero,', '¿para', 'vale?']);
 });
 
 test('pasa las palabras al timeline y marca las que parte un corte', () => {
@@ -208,6 +209,12 @@ test('diferencias entre lo esperado y lo que se oye', () => {
   assert.equal(d.length, 1);
   assert.deepEqual(d[0].expected, ['cómo']);
   assert.equal(d[0].minor, true);
+  // números escritos de otra forma o una palabra partida: leve; una frase que falta: no
+  const e2 = words('son 180.000 visitas y lo valoraré mucho');
+  const h2 = words('son 180 mil visitas y lo valorar es mucho y esto no estaba');
+  const d2 = diffWords(e2, h2);
+  assert.ok(d2.filter((x) => !x.minor).every((x) => /estaba/.test(x.heard.join(' '))), JSON.stringify(d2));
+  assert.equal(d2.filter((x) => !x.minor).length, 1);
 });
 
 test('une rangos que se solapan', () => {
