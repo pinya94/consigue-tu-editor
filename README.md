@@ -53,6 +53,9 @@ FFmpeg viene incluido; no hace falta instalar nada más. Para trabajar con Claud
 5. La preview usa **copias ligeras** de tus vídeos (540p), que el editor crea solo en segundo plano. Así
    va fluida aunque el original sea un 1080p de OBS de cientos de MB. Al exportar siempre se usa el
    original. Con el botón *Preview ligera / original* puedes cambiar entre las dos.
+6. En el timeline se ve la **forma de onda** del audio de cada clip, para ver dónde hablas y dónde cortar.
+7. Para poner **música de fondo**, añádela en una pista de audio y pulsa el botón ⤓ de esa pista
+   (*ducking*): la música baja sola cuando hablas y vuelve a subir en las pausas, en la preview y al exportar.
 
 ---
 
@@ -76,6 +79,12 @@ Ejemplos:
 > Revisa el vídeo y, donde no mire a cámara, pon una animación a pantalla completa que ilustre lo
 > que estoy contando. Que empiece un poco antes y acabe un poco después.
 
+> Transcribe el vídeo y quita las tomas repetidas.
+
+> Quita desde "bueno, antes de empezar" hasta "vamos al lío".
+
+> Pon esta canción de fondo, que baje cuando hablo.
+
 > Exporta el vídeo.
 
 Si no te gusta algo, pulsa `Ctrl+Z` en el editor: los cambios de Claude se deshacen igual que los tuyos.
@@ -84,9 +93,13 @@ Si no te gusta algo, pulsa `Ctrl+Z` en el editor: los cambios de Claude se desha
 
 Cada clip tiene un **zoom** (1 = normal, 1.2 = 20 % más cerca) y un **punto de enfoque** (`zoomX`,
 `zoomY`, de 0 a 1), que indica hacia dónde se acerca. Lo típico en vídeos hablados es alternar el
-zoom entre cortes consecutivos (`1` → `1.15` → `1` → `1.2`…). Así los cortes se notan menos y el
+zoom cuando cambia la frase o la idea (`1` → `1.15` → `1` → `1.2`…). Así los cortes se notan menos y el
 vídeo tiene más ritmo. Puedes ponerlo a mano en el panel derecho o pedírselo a Claude, que mira los
 fotogramas para centrar el zoom en tu cara.
+
+El zoom también puede ser **animado**, como en CapCut: con *Zoom final* (`zoomTo`) el clip pasa
+suavemente de su zoom al final en el tiempo que digas (`zoomTime`). Con `zoom=1 zoomTo=1.2 zoomTime=0.4`
+tienes un *punch-in* suave; sin `zoomTime`, un acercamiento lento durante todo el clip.
 
 ### Animaciones
 
@@ -120,8 +133,26 @@ con muchos fotogramas y su segundo marcado). Así encuentra los tramos en los qu
 o a un lado. Después crea una animación a pantalla completa para cada tramo, con un margen de unos
 0,4 s antes y después, para que el cambio de plano no coincida justo con el movimiento de los ojos.
 
-El editor no transcribe el audio. Para que las animaciones ilustren lo que dices, pásale a Claude la
-transcripción o cuéntale de qué hablas en cada parte.
+Para que las animaciones ilustren lo que dices, Claude usa la transcripción del vídeo (ver abajo).
+
+### Transcripción y edición por texto
+
+El editor transcribe tu voz con [whisper.cpp](https://github.com/ggml-org/whisper.cpp), en tu ordenador
+y sin conexión. Whisper no viene incluido porque pesa bastante: la primera vez, Claude te preguntará
+si lo descarga (unos 700 MB con tarjeta NVIDIA, o 190 MB en la versión para CPU) y dónde guardarlo.
+Si tu disco C: va justo, guárdalo en otro disco.
+
+Con la transcripción:
+- `.editor/transcript.json` tiene **cada palabra con su segundo en el timeline**. Los tiempos se
+  ajustan a tu voz real (alineación por palabra), así que los cortes caen en silencios de verdad y
+  no se comen finales de palabra.
+- Cada vídeo se transcribe **una sola vez**. Cuando cortas, la transcripción se actualiza sola.
+- `retakes` encuentra las **tomas repetidas** (cuando empiezas una frase, te equivocas y la repites),
+  las palabras repetidas ("y bueno, y bueno"), las muletillas y las frases que se quedan a medias, y
+  propone quitar la primera toma.
+- `cut-text "desde…" "hasta…"` quita un trozo diciendo por qué frase empieza y por cuál acaba.
+- `verify` revisa el montaje: palabras partidas por un corte, cortes sin pausa y tomas repetidas
+  que quedan. Además vuelve a transcribir el audio ya cortado para ver si se entiende.
 
 ---
 
@@ -138,12 +169,19 @@ Claude usa la CLI, pero tú también puedes usarla. Con la app instalada:
 | `info` | Pistas, clips (con sus ids) y medios |
 | `add <archivo> [--track v2] [--at 3]` | Añade un clip |
 | `split <t>` · `trim <clip> --start/--end` · `move <clip> <t>` | Cortar, recortar, mover |
-| `set <clip> zoom=1.2 zoomX=0.5 zoomY=0.4 volume=0.5` | Cambiar propiedades |
+| `set <clip> zoom=1.2 zoomX=0.5 zoomY=0.4 volume=0.5` | Cambiar propiedades (`zoomTo=1.2 zoomTime=0.4`: zoom animado) |
 | `delete <clip> [--ripple]` | Borrar (y cerrar el hueco) |
 | `silences <clip> [--apply]` | Detectar (y quitar) silencios |
 | `sheet <clip> [--every 2]` | Hojas de miniaturas para revisar el vídeo |
 | `frame <t>` | Fotograma final compuesto en PNG |
-| `review` | Vídeo de 360p y audio WAV muy ligeros, para revisar o transcribir el montaje |
+| `review` | Vídeo de 360p y audio WAV muy ligeros, para revisar el montaje |
+| `transcribe [--prompt "Claude, CapCut"]` | Transcribe la voz: `.editor/transcript.json` con cada palabra y su tiempo en el timeline |
+| `transcript [--words]` | Muestra la transcripción del montaje por frases (o palabra a palabra, numeradas) |
+| `retakes [--apply all\|1,3]` | Tomas repetidas, repeticiones, muletillas y frases a medias (y quitarlas) |
+| `cut-text "desde…" "hasta…"` · `cut-words 120-135` | Cortar por texto o por número de palabra, ajustado a los silencios |
+| `verify [--quick]` | Revisa los cortes y vuelve a transcribir el montaje para ver si se entiende |
+| `music <archivo> [--duck 0.25]` | Música de fondo que baja sola cuando hablas |
+| `whisper install --dir D:/whisper` | Descarga whisper.cpp y el modelo en español |
 | `export [--draft]` | Exportar a MP4 (o un borrador rápido de 480p) |
 
 Todo queda en `proyecto.json`, un JSON legible. Así cualquiera, persona o IA, puede leerlo y
@@ -171,7 +209,8 @@ React en `src/` y la CLI en `cli/`. Hay más detalle en [`CLAUDE.md`](CLAUDE.md)
 
 - Solo Windows por ahora.
 - Las animaciones HTML tienen que funcionar sin internet: las fuentes y librerías van dentro de `media/`.
-- No transcribe el audio.
+- La transcripción necesita descargar whisper.cpp y un modelo aparte. Sin tarjeta NVIDIA va más
+  lenta (más o menos lo que dura el vídeo), pero cada vídeo solo se transcribe una vez.
 
 ## Colaborar y licencia
 

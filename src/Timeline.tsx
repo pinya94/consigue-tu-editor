@@ -25,6 +25,7 @@ interface Props {
   pps: number;
   setPps(v: number): void;
   silences: { clipId: string; ranges: Range[] } | null;
+  peaks: Record<string, Uint8Array>;
   onDrop(r: DropRequest): void;
   onTrackChange(trackId: string, patch: Partial<Track>): void;
   onTrackRemove(trackId: string): void;
@@ -206,7 +207,17 @@ export function Timeline(props: Props) {
             <TrackHead track={track} onChange={props.onTrackChange} onRemove={props.onTrackRemove} canRemove={project.tracks.length > 1} />
             <div className={`lane ${track.hidden || track.muted ? 'off' : ''}`} data-track={track.id} onPointerDown={scrub}>
               {track.clips.map((c) => (
-                <ClipView key={c.id} clip={c} pps={pps} selected={selected.has(c.id)} missing={!!project.assets[c.src]?.missing} onDrag={startDrag} />
+                <ClipView
+                  key={c.id}
+                  clip={c}
+                  pps={pps}
+                  selected={selected.has(c.id)}
+                  missing={!!project.assets[c.src]?.missing}
+                  onDrag={startDrag}
+                  peaks={props.peaks[c.src]}
+                  view={visibleSpan(c, pps, view)}
+                  audioTrack={track.kind === 'audio'}
+                />
               ))}
               {props.silences &&
                 track.clips.some((c) => c.id === props.silences!.clipId) &&
@@ -221,6 +232,50 @@ export function Timeline(props: Props) {
       </div>
     </div>
   );
+}
+
+// Parte visible del clip, en píxeles desde su borde izquierdo (o null si no se ve).
+// Se redondea a 64 px para que el scroll no repinte la onda de todos los clips en cada píxel.
+function visibleSpan(c: Clip, pps: number, view: { left: number; width: number }) {
+  const x0 = c.start * pps;
+  const w = c.duration * pps;
+  const a = Math.max(0, Math.floor((view.left - x0) / 64) * 64);
+  const b = Math.min(w, Math.ceil((view.left + view.width - HEAD_W - x0) / 64) * 64 + 64);
+  return b > a ? `${a}:${b}` : null;
+}
+
+// Forma de onda del trozo visible del clip: un pico por columna de píxeles.
+const PEAKS_RATE = 100;
+function Waveform({ peaks, clip, pps, span, full }: { peaks: Uint8Array; clip: Clip; pps: number; span: string; full: boolean }) {
+  const ref = useRef<HTMLCanvasElement>(null);
+  const [a, b] = span.split(':').map(Number);
+  const width = Math.max(1, Math.round(b - a));
+  useEffect(() => {
+    const cv = ref.current;
+    if (!cv) return;
+    const h = cv.clientHeight || 30;
+    const dpr = window.devicePixelRatio || 1;
+    cv.width = width * dpr;
+    cv.height = h * dpr;
+    const ctx = cv.getContext('2d')!;
+    ctx.scale(dpr, dpr);
+    ctx.clearRect(0, 0, width, h);
+    ctx.fillStyle = full ? 'rgba(220, 255, 235, 0.55)' : 'rgba(210, 230, 255, 0.5)';
+    const vol = Math.min(2, clip.volume ?? 1);
+    const mid = full ? h / 2 : h;
+    for (let x = 0; x < width; x++) {
+      const t0 = clip.in + (a + x) / pps;
+      const i0 = Math.floor(t0 * PEAKS_RATE);
+      const i1 = Math.max(i0 + 1, Math.floor((t0 + 1 / pps) * PEAKS_RATE));
+      let m = 0;
+      for (let i = i0; i < i1 && i < peaks.length; i++) if (peaks[i] > m) m = peaks[i];
+      const v = Math.min(1, (m / 255) * vol);
+      const bar = Math.max(v > 0.02 ? 1 : 0, v * (full ? h / 2 - 1 : h - 2));
+      if (full) ctx.fillRect(x, mid - bar, 1, bar * 2);
+      else ctx.fillRect(x, mid - bar, 1, bar);
+    }
+  }, [peaks, clip.in, clip.volume, pps, a, width, full]);
+  return <canvas ref={ref} className={`wave ${full ? 'full' : ''}`} style={{ left: a, width }} />;
 }
 
 function Ruler({ pps, left, width, fps, onPointerDown }: { pps: number; left: number; width: number; fps: number; onPointerDown(e: React.PointerEvent): void }) {
@@ -274,6 +329,11 @@ function TrackHead({ track, onChange, onRemove, canRemove }: { track: Track; onC
             {track.hidden ? '◌' : '◉'}
           </button>
         ) : null}
+        {track.kind === 'audio' ? (
+          <button className={track.duck ? 'on' : ''} title={track.duck ? 'Ducking activado: baja cuando se habla. Clic para quitarlo' : 'Ducking: que esta pista (música) baje sola cuando se habla'} onClick={() => onChange(track.id, { duck: !track.duck })}>
+            ⤓
+          </button>
+        ) : null}
         <button className={track.muted ? 'on' : ''} title={track.muted ? 'Activar sonido' : 'Silenciar pista'} onClick={() => onChange(track.id, { muted: !track.muted })}>
           {track.muted ? '🔇' : '🔊'}
         </button>
@@ -293,12 +353,18 @@ const ClipView = memo(function ClipView({
   selected,
   missing,
   onDrag,
+  peaks,
+  view,
+  audioTrack,
 }: {
   clip: Clip;
   pps: number;
   selected: boolean;
   missing: boolean;
   onDrag(e: React.PointerEvent, c: Clip, mode: 'move' | 'left' | 'right'): void;
+  peaks?: Uint8Array;
+  view: string | null;
+  audioTrack: boolean;
 }) {
   const kind = kindOf(clip.src) || 'video';
   const w = clip.duration * pps;
@@ -309,6 +375,7 @@ const ClipView = memo(function ClipView({
       onPointerDown={(e) => onDrag(e, clip, 'move')}
       title={`${clip.id} · ${clip.src}\n${formatTime(clip.start)} → ${formatTime(clipEnd(clip))} (${clip.duration.toFixed(2)}s)`}
     >
+      {peaks && view && <Waveform peaks={peaks} clip={clip} pps={pps} span={view} full={audioTrack} />}
       {w > 30 && (
         <span className="clip-label">
           <b>{clip.id}</b> {fileName(clip.src)}

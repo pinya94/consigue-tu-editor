@@ -20,6 +20,7 @@ export function Editor({ dir, initial, base, onClose }: { dir: string; initial: 
   const [proxies, setProxies] = useState<Record<string, string>>({});
   const [proxyProgress, setProxyProgress] = useState<{ src: string; value: number } | null>(null);
   const [useProxies, setUseProxies] = useState(true);
+  const [peaks, setPeaks] = useState<Record<string, Uint8Array>>({});
   const [toast, setToast] = useState<string | null>(null);
   const timelineBox = useRef<HTMLDivElement>(null);
 
@@ -62,8 +63,11 @@ export function Editor({ dir, initial, base, onClose }: { dir: string; initial: 
     const offProg = api.onExportProgress((pr) => setExporting((cur) => (cur ? pr : cur)));
     const offProxyProg = api.onProxyProgress(setProxyProgress);
     const offProxyReady = api.onProxyReady(setProxies);
+    const offWave = api.onWaveforms(setPeaks);
     api.proxies(h.current()).then(setProxies);
+    api.waveforms(h.current()).then(setPeaks);
     return () => {
+      offWave();
       offProxyProg();
       offProxyReady();
       offExt();
@@ -295,7 +299,7 @@ export function Editor({ dir, initial, base, onClose }: { dir: string; initial: 
       <div className="main-area">
         <MediaBin project={project} onImport={() => importFiles()} onAdd={(src) => addAt([src], clock.time, null)} />
         <div className="center">
-          <Preview project={project} dir={dir} base={base} proxies={useProxies ? proxies : {}} />
+          <Preview project={project} dir={dir} base={base} proxies={useProxies ? proxies : {}} peaks={peaks} />
           <Transport project={project} onToggle={togglePlay}>
             <button
               className={`ghost quality ${useProxies ? 'on' : ''}`}
@@ -345,6 +349,7 @@ export function Editor({ dir, initial, base, onClose }: { dir: string; initial: 
           pps={pps}
           setPps={setPps}
           silences={silences}
+          peaks={peaks}
           onDrop={onDrop}
           onTrackChange={(id, patch: Partial<Track>) => apply((p) => P.updateTrack(p, id, patch))}
           onTrackRemove={(id) => apply((p) => P.removeTrack(p, id))}

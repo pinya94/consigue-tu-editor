@@ -10,6 +10,8 @@ import { makeHtmlRenderer } from './htmlRender.mjs';
 import { APP_NAME, loadProject, saveProject, initProject, syncAssets, toSrc, probe, clipSilences, projectFile, findProjectDir, serialize, writeProjectGuide } from '../core/media.mjs';
 import { exportProject, exportFrame, PRESETS } from '../core/export.mjs';
 import { readProxies, pendingProxies, makeProxy } from '../core/proxy.mjs';
+import { readPeaks, computePeaks } from '../core/waveform.mjs';
+import { updateTranscript } from '../core/whisper.mjs';
 import { findClip, kindOf, parseTime, PROJECT_FILE } from '../core/project.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -51,6 +53,14 @@ function send(channel, payload) {
 
 function write(p) {
   current.lastWritten = saveProject(current.dir, p);
+  refreshTranscript(p);
+}
+
+// Si el proyecto ya se transcribió, .editor/transcript.json sigue a los cortes.
+function refreshTranscript(p) {
+  try {
+    if (current) updateTranscript(current.dir, p);
+  } catch {}
 }
 
 async function openProject(dir) {
@@ -66,6 +76,7 @@ async function openProject(dir) {
   watch(dir);
   rememberProject(dir);
   queueProxies();
+  queueWaveforms();
   win?.setTitle(`${p.name} — ${APP_NAME}`);
   return { dir, project: p };
 }
@@ -103,7 +114,9 @@ function watch(dir) {
         if (synced.changed) write(p);
         else c.lastWritten = text;
         send('project:external', p);
+        refreshTranscript(p);
         queueProxies();
+        queueWaveforms();
       } catch (e) {
         // JSON a medio escribir o con errores: se avisa y se espera al siguiente cambio
         send('app:error', `No se pudo leer ${PROJECT_FILE}: ${e.message}`);
@@ -136,6 +149,47 @@ function queueProxies() {
     } finally {
       proxyJob = null;
       send('proxy:progress', null);
+    }
+  })();
+}
+
+// ---------- Forma de onda ----------
+
+let waveJob = null;
+
+function audioSources(p) {
+  return Object.entries(p.assets)
+    .filter(([, a]) => !a.missing && (a.kind === 'audio' || (a.kind === 'video' && a.hasAudio)))
+    .map(([src]) => src);
+}
+
+function readyPeaks(dir, p) {
+  const out = {};
+  for (const src of audioSources(p)) {
+    const pk = readPeaks(dir, p, src);
+    if (pk) out[src] = pk;
+  }
+  return out;
+}
+
+// Calcula en segundo plano los picos que falten y avisa a la interfaz.
+function queueWaveforms() {
+  if (waveJob || !current) return;
+  const dir = current.dir;
+  waveJob = (async () => {
+    try {
+      for (;;) {
+        if (!current || current.dir !== dir) break;
+        const p = loadProject(dir);
+        const src = audioSources(p).find((s) => !readPeaks(dir, p, s));
+        if (!src) break;
+        await computePeaks(dir, p, src);
+        send('waveform:ready', readyPeaks(dir, p));
+      }
+    } catch (e) {
+      send('app:error', e.message);
+    } finally {
+      waveJob = null;
     }
   })();
 }
@@ -243,6 +297,7 @@ function registerIpc() {
   });
 
   ipcMain.handle('proxy:list', (_e, project) => (current ? readProxies(current.dir, project) : {}));
+  ipcMain.handle('waveform:list', (_e, project) => (current ? readyPeaks(current.dir, project) : {}));
 
   // preset 'final' pregunta dónde guardar; 'draft' (borrador rápido) se guarda directamente en export/
   ipcMain.handle('export:run', async (_e, { project, preset = 'final' }) => {

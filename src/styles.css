@@ -508,6 +508,16 @@ kbd {
   border: 2px solid #fff;
   z-index: 2;
 }
+.clip .wave {
+  position: absolute;
+  bottom: 0;
+  height: 58%;
+  pointer-events: none;
+}
+.clip .wave.full {
+  top: 0;
+  height: 100%;
+}
 .clip-label {
   position: absolute;
   left: 8px;

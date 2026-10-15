@@ -6,12 +6,13 @@
 //   version: 1, name, width, height, fps,
 //   assets: { "<src>": { kind, duration, width, height, hasAudio } },   // metadatos cacheados
 //   tracks: [   // de abajo a arriba: la última pista se pinta encima
-//     { id, kind: "video" | "audio", name, muted?, hidden?,
-//       clips: [ { id, src, start, in, duration, volume?, fit?, zoom?, zoomX?, zoomY? } ] }
+//     { id, kind: "video" | "audio", name, muted?, hidden?, duck?,
+//       clips: [ { id, src, start, in, duration, volume?, fit?, zoom?, zoomX?, zoomY?, zoomTo?, zoomTime? } ] }
 //   ]
 // }
 // Tiempos en segundos. start = posición en el timeline, in = desde qué segundo del archivo fuente.
 // zoom: 1 = normal, 1.2 = acercamiento del 20 %; zoomX/zoomY (0-1) = punto hacia el que se acerca.
+// zoomTo/zoomTime: zoom animado (de zoom a zoomTo en zoomTime s). duck (pista de audio): baja cuando se habla.
 
 export const PROJECT_FILE = 'proyecto.json';
 export const VERSION = 1;
@@ -127,6 +128,19 @@ export function activeClipsAt(p, t) {
   return out;
 }
 
+// Al partir un clip con zoom animado, cada trozo sigue la misma animación en vez de repetirla.
+// Devuelve los cambios de zoom del trozo que empieza `offset` segundos después del inicio del clip.
+function zoomAfter(c, offset) {
+  if (c.zoomTo == null) return {};
+  const T = c.zoomTime > 0 ? c.zoomTime : c.duration;
+  if (offset >= T) return { zoom: c.zoomTo, zoomTo: undefined, zoomTime: undefined };
+  return { zoom: Math.round(zoomAt(c, offset) * 1000) / 1000, zoomTime: round(T - offset) };
+}
+// El trozo de la izquierda conserva la duración de la animación original.
+function zoomBefore(c) {
+  return c.zoomTo != null && !(c.zoomTime > 0) ? { zoomTime: c.duration } : {};
+}
+
 // Deja libre el rango [from, to) de una pista recortando o partiendo los clips que lo pisan.
 function clearRange(p, track, from, to, exceptId) {
   const result = [];
@@ -137,15 +151,15 @@ function clearRange(p, track, from, to, exceptId) {
       continue;
     }
     if (c.start < from) {
-      const left = { ...c, duration: round(from - c.start) };
+      const left = { ...c, ...zoomBefore(c), duration: round(from - c.start) };
       result.push(left);
       if (end > to) {
         // el id nuevo tiene que ser único también frente a los clips ya recolocados en `result`
-        const right = { ...c, id: nextId({ tracks: [...p.tracks, { clips: result }] }, 'c'), start: to, in: round(c.in + (to - c.start)), duration: round(end - to) };
+        const right = { ...c, ...zoomAfter(c, to - c.start), id: nextId({ tracks: [...p.tracks, { clips: result }] }, 'c'), start: to, in: round(c.in + (to - c.start)), duration: round(end - to) };
         result.push(right);
       }
     } else if (end > to) {
-      result.push({ ...c, start: to, in: round(c.in + (to - c.start)), duration: round(end - to) });
+      result.push({ ...c, ...zoomAfter(c, to - c.start), start: to, in: round(c.in + (to - c.start)), duration: round(end - to) });
     }
     // si está entero dentro del rango, desaparece
   }
@@ -216,7 +230,8 @@ export function splitClip(p0, clipId, t) {
   const { track, clip } = mustClip(p, clipId);
   t = snapToFrame(p, t);
   if (t <= clip.start || t >= clipEnd(clip)) return { project: p0, newId: null };
-  const second = { ...clip, id: nextId(p, 'c'), start: t, in: round(clip.in + (t - clip.start)), duration: round(clipEnd(clip) - t) };
+  const second = { ...clip, ...zoomAfter(clip, t - clip.start), id: nextId(p, 'c'), start: t, in: round(clip.in + (t - clip.start)), duration: round(clipEnd(clip) - t) };
+  Object.assign(clip, zoomBefore(clip));
   clip.duration = round(t - clip.start);
   track.clips.push(second);
   sortClips(track);
@@ -329,6 +344,55 @@ export function removeRanges(p0, clipId, ranges) {
   return p;
 }
 
+// Quita rangos del timeline en todas las pistas y cierra los huecos (como borrar con ripple).
+// Se usa para los cortes por texto: todo lo que va detrás se adelanta a la vez, así que las
+// animaciones siguen cayendo sobre la misma frase. Las imágenes, las animaciones y los clips de una
+// pista con ducking (música) no se parten: se acortan, para que no salten a mitad.
+export function removeTimeRanges(p0, ranges) {
+  let p = clone(p0);
+  const sorted = [...ranges].sort((a, b) => b.start - a.start);
+  for (const r of sorted) {
+    const from = snapToFrame(p, r.start);
+    const to = snapToFrame(p, r.end);
+    const len = round(to - from);
+    if (len < 1 / p.fps) continue;
+    for (const t of p.tracks) {
+      const elastic = (c) => t.duck || kindOf(c.src) === 'html' || kindOf(c.src) === 'image';
+      const soft = [];
+      for (const c of t.clips.filter(elastic)) {
+        const end = clipEnd(c);
+        if (end <= from + 0.0005) soft.push(c);
+        else if (c.start >= to - 0.0005) soft.push({ ...c, start: round(c.start - len) });
+        else {
+          // solapa con el rango: pierde la parte solapada sin partirse
+          const overlap = Math.min(end, to) - Math.max(c.start, from);
+          const d = round(c.duration - overlap);
+          if (d > 0.0005) soft.push({ ...c, start: round(Math.min(c.start, from)), duration: d });
+        }
+      }
+      // el resto se parte por los bordes del rango y lo de detrás se adelanta
+      const hard = { ...t, clips: t.clips.filter((c) => !elastic(c)) };
+      clearRange(p, hard, from, to);
+      for (const c of hard.clips) if (c.start >= to - 0.0005) c.start = round(c.start - len);
+      t.clips = [...soft, ...hard.clips];
+      sortClips(t);
+    }
+  }
+  return p;
+}
+
+// Zoom de un clip en el segundo `local` desde su inicio. Con zoomTo el zoom pasa de `zoom` a `zoomTo`
+// con una curva suave durante zoomTime segundos (por defecto, todo el clip) y luego se queda fijo.
+// Un "punch-in" suave: zoom=1 zoomTo=1.2 zoomTime=0.4. Un acercamiento lento: zoom=1 zoomTo=1.1.
+export function zoomAt(c, local) {
+  const z0 = c.zoom || 1;
+  if (c.zoomTo == null || c.zoomTo === z0) return z0;
+  const T = c.zoomTime > 0 ? c.zoomTime : c.duration;
+  const x = Math.max(0, Math.min(1, local / T));
+  const e = x * x * (3 - 2 * x);
+  return z0 + (c.zoomTo - z0) * e;
+}
+
 // Corrige y completa un proyecto leído de disco (por si Claude o una persona lo editó a mano).
 export function normalize(p0) {
   const p = clone(p0);
@@ -372,6 +436,7 @@ export function validate(p) {
       if (!p.assets[c.src]) problems.push(`${c.id}: falta información del archivo ${c.src}`);
       else if (p.assets[c.src].missing) problems.push(`${c.id}: no se encuentra el archivo ${c.src}`);
       if (c.zoom != null && !(c.zoom >= 1 && c.zoom <= 5)) problems.push(`${c.id}: zoom debe estar entre 1 y 5`);
+      if (c.zoomTo != null && !(c.zoomTo >= 1 && c.zoomTo <= 5)) problems.push(`${c.id}: zoomTo debe estar entre 1 y 5`);
       const sd = sourceDuration(p, c.src);
       if (c.in + c.duration > sd + 0.01) problems.push(`${c.id}: se sale del final del archivo fuente (${sd}s)`);
       const next = t.clips[i + 1];

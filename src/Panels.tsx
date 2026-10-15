@@ -113,6 +113,22 @@ function ClipInspector(props: InspectorProps & { clip: Clip; trackName: string }
             <Field label="Zoom" hint="1 = normal, 1.2 = 20 % más cerca" value={clip.zoom ?? 1} onCommit={(v) => props.update(clip.id, { zoom: Math.max(1, Math.min(5, num(v))) })} />
             <Field label="Enfoque X" hint="Hacia dónde se acerca el zoom: 0 = izquierda, 0.5 = centro, 1 = derecha" value={clip.zoomX ?? 0.5} onCommit={(v) => props.update(clip.id, { zoomX: Math.max(0, Math.min(1, num(v))) })} />
             <Field label="Enfoque Y" hint="0 = arriba, 0.5 = centro, 1 = abajo" value={clip.zoomY ?? 0.5} onCommit={(v) => props.update(clip.id, { zoomY: Math.max(0, Math.min(1, num(v))) })} />
+            <Field
+              label="Zoom final"
+              hint="Zoom animado: pasa suavemente de Zoom a este valor (p. ej. 1.2). Vacío = zoom fijo"
+              value={clip.zoomTo ?? ''}
+              text
+              onCommit={(v) => props.update(clip.id, { zoomTo: v.trim() === '' ? undefined : Math.max(1, Math.min(5, num(v))) })}
+            />
+            {clip.zoomTo != null && (
+              <Field
+                label="Duración zoom (s)"
+                hint="Cuánto tarda el zoom animado. 0,3-0,5 = punch-in rápido; vacío = todo el clip (acercamiento lento)"
+                value={clip.zoomTime ?? ''}
+                text
+                onCommit={(v) => props.update(clip.id, { zoomTime: v.trim() === '' ? undefined : Math.max(0.05, num(v)) })}
+              />
+            )}
           </>
         )}
         {kind !== 'audio' && (

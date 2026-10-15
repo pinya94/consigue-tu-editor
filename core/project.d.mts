@@ -24,6 +24,8 @@ export interface Clip {
   zoom?: number; // 1 = sin zoom, 1.2 = 20 % más cerca
   zoomX?: number; // punto de enfoque del zoom, 0-1 (0.5 = centro)
   zoomY?: number;
+  zoomTo?: number; // zoom animado: de `zoom` a `zoomTo`
+  zoomTime?: number; // en estos segundos (por defecto, todo el clip)
 }
 export interface Track {
   id: string;
@@ -31,6 +33,7 @@ export interface Track {
   name: string;
   muted?: boolean;
   hidden?: boolean;
+  duck?: boolean | number; // música: baja (a este volumen, 0.25 por defecto) cuando se habla
   clips: Clip[];
 }
 export interface Project {
@@ -70,6 +73,8 @@ export function trimClip(p: Project, clipId: string, o: { start?: number; end?: 
 export function moveClip(p: Project, clipId: string, newStart: number, newTrackId?: string): Project;
 export function updateClip(p: Project, clipId: string, patch: Partial<Clip>): Project;
 export function deleteClips(p: Project, ids: string[], o?: { ripple?: boolean }): Project;
+export function removeTimeRanges(p: Project, ranges: Range[]): Project;
+export function zoomAt(c: Clip, local: number): number;
 export function removeRanges(p: Project, clipId: string, ranges: Range[]): Project;
 export function normalize(p: unknown): Project;
 export function validate(p: Project): string[];

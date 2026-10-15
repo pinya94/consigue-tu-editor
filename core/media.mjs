@@ -144,6 +144,46 @@ export function toSrc(dir, abs) {
   return abs.split(path.sep).join('/');
 }
 
+// ---------- WAV ----------
+
+// Muestras de un WAV PCM de 16 bits (mono).
+export function readWavSamples(file) {
+  const b = fs.readFileSync(file);
+  let off = 12;
+  let rate = 16000;
+  while (off + 8 <= b.length) {
+    const id = b.toString('ascii', off, off + 4);
+    const size = b.readUInt32LE(off + 4);
+    if (id === 'fmt ') rate = b.readUInt32LE(off + 12);
+    if (id === 'data') {
+      const len = Math.min(size, b.length - off - 8) >> 1;
+      const start = b.byteOffset + off + 8;
+      return { samples: new Int16Array(b.buffer.slice(start, start + len * 2)), rate };
+    }
+    off += 8 + size + (size & 1);
+  }
+  throw new Error(`WAV no válido: ${file}`);
+}
+
+export function writeWav(file, samples, rate = 16000) {
+  const b = Buffer.alloc(44 + samples.length * 2);
+  b.write('RIFF', 0, 'ascii');
+  b.writeUInt32LE(36 + samples.length * 2, 4);
+  b.write('WAVEfmt ', 8, 'ascii');
+  b.writeUInt32LE(16, 16);
+  b.writeUInt16LE(1, 20);
+  b.writeUInt16LE(1, 22);
+  b.writeUInt32LE(rate, 24);
+  b.writeUInt32LE(rate * 2, 28);
+  b.writeUInt16LE(2, 32);
+  b.writeUInt16LE(16, 34);
+  b.write('data', 36, 'ascii');
+  b.writeUInt32LE(samples.length * 2, 40);
+  Buffer.from(samples.buffer, samples.byteOffset, samples.length * 2).copy(b, 44);
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  fs.writeFileSync(file, b);
+}
+
 // ---------- Análisis de archivos ----------
 
 export async function probe(file) {

@@ -25,9 +25,16 @@ Comandos habituales (los tiempos son segundos del timeline; también vale `1:02.
 {{EDITOR}} move c3 20 --track v2
 {{EDITOR}} set c2 volume=0.3 fit=cover
 {{EDITOR}} set c5 zoom=1.2 zoomX=0.5 zoomY=0.35      # acercamiento del 20 % hacia la cara
+{{EDITOR}} set c5 zoom=1 zoomTo=1.2 zoomTime=0.4     # zoom animado: punch-in suave en 0,4 s
 {{EDITOR}} delete c4 --ripple                        # borra y cierra el hueco
 {{EDITOR}} silences c1                               # lista los silencios (umbral automático)
 {{EDITOR}} silences c1 --apply                       # los quita (jump cuts) con márgenes buenos
+{{EDITOR}} transcribe                                 # palabras con su tiempo en .editor/transcript.json
+{{EDITOR}} transcript                                # el montaje por frases (--words: palabra a palabra)
+{{EDITOR}} retakes                                   # tomas repetidas, muletillas, frases a medias
+{{EDITOR}} cut-text "bueno, antes de" "vamos allá"   # quita ese trozo, cortando en silencios
+{{EDITOR}} verify                                    # revisa los cortes y vuelve a transcribir el montaje
+{{EDITOR}} music media/cancion.mp3 --duck 0.25       # música de fondo que baja sola al hablar
 {{EDITOR}} sheet c1 --every 2                        # hojas de miniaturas para revisar el vídeo
 {{EDITOR}} frame 12.5 --out .editor/f.png            # fotograma compuesto
 {{EDITOR}} review                                    # 360p + audio WAV 16 kHz del montaje, muy ligero
@@ -70,7 +77,10 @@ Para cambios grandes también puedes editar `proyecto.json` directamente. Despu�
   - `zoom` (1 = normal, 1.2 = 20 % más cerca, máximo 5).
   - `zoomX` y `zoomY`: punto hacia el que se acerca el zoom, de 0 a 1. `0.5, 0.5` es el centro;
     `0.5, 0.3` apunta más arriba, donde suele estar la cara.
-- Opcionales de la pista: `muted`, `hidden`.
+  - `zoomTo` y `zoomTime`: zoom animado. El clip pasa con una curva suave de `zoom` a `zoomTo`
+    en `zoomTime` segundos (sin `zoomTime`, durante todo el clip) y luego se queda fijo.
+- Opcionales de la pista: `muted`, `hidden` y, en pistas de audio, `duck` (`true` o el volumen al
+  que baja, p. ej. `0.2`): la pista es música y baja sola cuando se habla.
 - En una misma pista los clips no se pueden solapar.
 - `src` es relativo a esta carpeta. Los archivos que se guardan en `media/` aparecen solos en la app.
 
@@ -125,6 +135,38 @@ mirando el PNG.
 
 Nunca cortes a mitad de frase: corta solo en silencios. Después, revisa con `export --draft` o `review`.
 
+### Transcripción, tomas repetidas y cortes por texto
+
+1. `transcribe` transcribe la voz con whisper.cpp (en español). Si dice que no está instalado,
+   **pregunta al usuario antes de descargar nada**: dile el tamaño y pregúntale dónde guardarlo
+   (si el disco C: va justo, en otro disco). Después: `whisper install --dir <carpeta>`
+   (CUDA + modelo medium, ~1,2 GB; con `--cpu` ~190 MB con `--model small`). Si el usuario ya tiene
+   whisper.cpp, usa `whisper set --bin … --model …`.
+2. Si el vídeo nombra marcas o palabras raras, pásalas con `--prompt "Claude, CapCut."`: whisper las
+   escribe mejor. Cada archivo se transcribe una sola vez (en CPU tarda más o menos lo que dura el audio).
+3. `.editor/transcript.json` tiene `words` (`i`, `w`, `start`, `end` en segundos del timeline, `clip`)
+   y `phrases`. Se actualiza solo cada vez que cambian los clips. Léelo en vez de pedir el audio.
+   `transcript` lo muestra por frases y `transcript --words --from 60 --to 90`, palabra a palabra.
+4. `retakes` lista lo que conviene quitar, con el rango del timeline ya ajustado a los silencios:
+   - **retake**: una frase que se repite poco después; se quita la primera toma (y lo que haya entre
+     las dos). Revisa que la que se queda es la buena.
+   - **repeticion**: palabras repetidas seguidas; **muletilla**: "eh", "mmm"…
+   - **cortada**: frase a medias. No se quita con `--apply all`: decide tú si sobra.
+   Aplica con `retakes --apply all` o `--apply 1,4,7`.
+5. `cut-text "desde…" "hasta…"` quita desde la primera frase hasta el final de la segunda; con un solo
+   texto, quita esa frase. Prueba antes con `--dry`. `cut-words 120-135` hace lo mismo por número de
+   palabra. Estos cortes afectan a **todas las pistas** (las animaciones de encima se mueven con el
+   vídeo; si una animación solapa el trozo quitado, se acorta).
+6. Al acabar, `verify`: avisa de palabras partidas por un corte, cortes sin pausa y tomas repetidas
+   que quedan, y vuelve a transcribir el montaje para comprobar que se entiende. `verify --quick` no
+   vuelve a transcribir (es instantáneo).
+
+### Música de fondo
+
+`music media/cancion.mp3` crea una pista "Música" con la canción de principio a fin, al 50 % de
+volumen y con ducking: baja al 25 % mientras se habla y sube en las pausas. Ajusta con
+`--volume` y `--duck 0.15` (más bajo) o `track set a2 duck=0.4`.
+
 ### Acercamientos (zoom) en los cortes
 
 Pon zoom **solo cuando cambia la frase o la idea**, no en cada corte: si alternas en cada microcorte el
@@ -133,6 +175,10 @@ Para que el zoom no cambie en un corte, pon el mismo valor en los clips de esa i
 cara: mira un fotograma, estima dónde está (de 0 a 1 en horizontal y vertical) y úsalo como
 `zoomX`/`zoomY`. Para remarcar una frase importante, usa un zoom mayor (1.3) en ese clip.
 
+Para un acercamiento animado, como en CapCut: `set c7 zoom=1 zoomTo=1.2 zoomTime=0.4` (punch-in
+suave al empezar el clip) o `set c7 zoom=1 zoomTo=1.1` (acercamiento lento durante todo el clip).
+Úsalo poco: en frases clave, no en cada corte.
+
 ### Animación a pantalla completa cuando la persona no mira a cámara
 
 1. Revisa el vídeo con `sheet <clip> --every 1`, o `--every 0.5` para más precisión. Apunta los
@@ -140,8 +186,8 @@ cara: mira un fotograma, estima dónde está (de 0 a 1 en horizontal y vertical)
    Junta los tramos separados por menos de 1 s.
 2. A cada tramo añádele margen: empieza un poco antes y acaba un poco después. Por defecto,
    **0,4 s antes y 0,4 s después**, para que el cambio no coincida con el movimiento de los ojos.
-3. Decide el contenido según lo que se dice en ese tramo. El editor no transcribe el audio: usa una
-   transcripción si el usuario te la da, o pregúntale qué dice ahí. Crea una animación
+3. Decide el contenido según lo que se dice en ese tramo: míralo en la transcripción
+   (`transcript --from <t> --to <t>`). Crea una animación
    **a pantalla completa** (fondo opaco) que ilustre lo que está diciendo. Dale la duración exacta
    del tramo con margen.
 4. Colócala en `v2` con `--at` (inicio del tramo menos el margen) y `--duration`. El audio sigue

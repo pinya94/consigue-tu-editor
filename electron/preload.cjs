@@ -18,6 +18,7 @@ contextBridge.exposeInMainWorld('editor', {
   detectSilences: (args) => ipcRenderer.invoke('silences:detect', args),
   exportVideo: (project, preset) => ipcRenderer.invoke('export:run', { project, preset }),
   proxies: (project) => ipcRenderer.invoke('proxy:list', project),
+  waveforms: (project) => ipcRenderer.invoke('waveform:list', project),
   cancelExport: () => ipcRenderer.invoke('export:cancel'),
   reveal: (p) => ipcRenderer.invoke('shell:reveal', p),
   pathForFile: (file) => webUtils.getPathForFile(file),
@@ -26,4 +27,5 @@ contextBridge.exposeInMainWorld('editor', {
   onError: on('app:error'),
   onProxyProgress: on('proxy:progress'),
   onProxyReady: on('proxy:ready'),
+  onWaveforms: on('waveform:ready'),
 });

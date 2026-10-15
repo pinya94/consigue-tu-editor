@@ -1,15 +1,18 @@
-import { memo, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { memo, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { Clip, Fit, Project, Track } from '../core/project.mjs';
-import { clipEnd, kindOf } from '../core/project.mjs';
+import { clipEnd, kindOf, zoomAt } from '../core/project.mjs';
+import { duckEnvelope, duckLevel, envelopeAt, hasDucking, voiceActivity } from '../core/duck.mjs';
 import { mediaUrl } from './api';
 import { useTime, usePlaying } from './clock';
 
 const PRELOAD_AHEAD = 3; // segundos: se carga por adelantado el siguiente clip de cada pista
 
-// Mismo cálculo que en la exportación: escalar alrededor del punto de enfoque
-function zoomStyle(c: Clip): React.CSSProperties {
-  if (!c.zoom || c.zoom === 1) return {};
-  return { transform: `scale(${c.zoom})`, transformOrigin: `${(c.zoomX ?? 0.5) * 100}% ${(c.zoomY ?? 0.5) * 100}%` };
+// Mismo cálculo que en la exportación: escalar alrededor del punto de enfoque.
+// `since`: segundos desde el inicio del clip (para el zoom animado).
+function zoomStyle(c: Clip, since: number): React.CSSProperties {
+  const z = zoomAt(c, since);
+  if (z === 1) return {};
+  return { transform: `scale(${z})`, transformOrigin: `${(c.zoomX ?? 0.5) * 100}% ${(c.zoomY ?? 0.5) * 100}%` };
 }
 
 const objectFit = (fit?: Fit) => (fit === 'cover' ? 'cover' : fit === 'stretch' ? 'fill' : 'contain');
@@ -37,7 +40,7 @@ function layersAt(p: Project, t: number): LayerInfo[] {
   return out;
 }
 
-export function Preview({ project, dir, base, proxies }: { project: Project; dir: string; base: string; proxies: Record<string, string> }) {
+export function Preview({ project, dir, base, proxies, peaks }: { project: Project; dir: string; base: string; proxies: Record<string, string>; peaks: Record<string, Uint8Array> }) {
   const time = useTime();
   const playing = usePlaying();
   const boxRef = useRef<HTMLDivElement>(null);
@@ -54,6 +57,13 @@ export function Preview({ project, dir, base, proxies }: { project: Project; dir
   const scale = Math.min(box.w / W, box.h / H) || 0;
   const layers = layersAt(project, time);
 
+  // ducking: la música baja cuando se habla (misma curva que en la exportación)
+  const duck = useMemo(() => {
+    if (!hasDucking(project)) return null;
+    const level = Math.min(...project.tracks.map(duckLevel).filter((x): x is number => x != null));
+    return duckEnvelope(voiceActivity(project, peaks), { level });
+  }, [project, peaks]);
+
   return (
     <div className="preview" ref={boxRef}>
       <div className="stage" style={{ width: W, height: H, transform: `translate(-50%, -50%) scale(${scale})` }}>
@@ -62,8 +72,10 @@ export function Preview({ project, dir, base, proxies }: { project: Project; dir
           const asset = project.assets[l.clip.src];
           // la preview usa la copia ligera si existe; la exportación siempre usa el original
           const url = mediaUrl(base, dir, (kind === 'video' && proxies[l.clip.src]) || l.clip.src, kind === 'html' ? asset?.mtime : undefined);
-          const style = { visibility: l.visible ? 'visible' : 'hidden', objectFit: objectFit(l.clip.fit), ...zoomStyle(l.clip) } as const;
-          const volume = Math.max(0, Math.min(1, l.clip.volume ?? 1));
+          const since = l.visible ? time - l.clip.start : 0;
+          const style = { visibility: l.visible ? 'visible' : 'hidden', objectFit: objectFit(l.clip.fit), ...zoomStyle(l.clip, since) } as const;
+          const ducked = duck && duckLevel(l.track) != null ? envelopeAt(duck, time) : 1;
+          const volume = Math.max(0, Math.min(1, (l.clip.volume ?? 1) * ducked));
           if (kind === 'video' || kind === 'audio')
             return (
               <MediaLayer
@@ -79,7 +91,7 @@ export function Preview({ project, dir, base, proxies }: { project: Project; dir
             );
           if (l.track.kind !== 'video') return null;
           if (kind === 'image') return <img key={l.key} className="layer" src={url} style={style} draggable={false} />;
-          if (kind === 'html') return <HtmlLayer key={l.key} url={url} local={l.local} visible={l.visible} zoom={zoomStyle(l.clip)} />;
+          if (kind === 'html') return <HtmlLayer key={l.key} url={url} local={l.local} visible={l.visible} zoom={zoomStyle(l.clip, since)} />;
           return null;
         })}
       </div>

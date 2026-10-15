@@ -11,8 +11,10 @@ import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { spawn } from 'node:child_process';
-import { ffmpegPath, resolveSrc, run } from './media.mjs';
-import { totalDuration, activeClipsAt, kindOf } from './project.mjs';
+import { ffmpegPath, resolveSrc, run, writeWav } from './media.mjs';
+import { totalDuration, activeClipsAt, kindOf, zoomAt } from './project.mjs';
+import { hasDucking, duckLevel, voiceActivity, duckEnvelope, PEAKS_RATE } from './duck.mjs';
+import { computePeaks } from './waveform.mjs';
 
 export const PRESETS = {
   final: { label: 'Final', height: null, fast: false, loudnorm: true },
@@ -76,6 +78,24 @@ function zoomFilter(p, it) {
   return `,pad=${W}:${H}:(ow-iw)/2:(oh-ih)/2:color=black@0,scale=${zw}:${zh},crop=${W}:${H}:${x}:${y}`;
 }
 
+// Zoom animado (zoomTo): zoompan con la misma curva suave que zoomAt(). `offset` = segundos del clip
+// que ya han pasado al empezar este tramo.
+function zoomAnimFilter(p, it, offset) {
+  const { width: W, height: H, fps } = p;
+  const z0 = it.zoom || 1;
+  const z1 = it.zoomTo;
+  const T = it.zoomTime > 0 ? it.zoomTime : it.clipDuration;
+  const x = `st(0,clip((on/${fps}+${n(offset)})/${n(T)},0,1))`;
+  const z = `${x}*0+${n(z0)}+(${n(z1 - z0)})*ld(0)*ld(0)*(3-2*ld(0))`;
+  const fx = n(it.zoomX ?? 0.5);
+  const fy = n(it.zoomY ?? 0.5);
+  return `,pad=${W}:${H}:(ow-iw)/2:(oh-ih)/2:color=black@0,zoompan=z='${z}':x='(iw-iw/zoom)*${fx}':y='(ih-ih/zoom)*${fy}':d=1:s=${W}x${H}:fps=${fps}`;
+}
+
+function isAnimated(it) {
+  return it.zoomTo != null && it.zoomTo !== (it.zoom || 1);
+}
+
 // Entrada de FFmpeg para un elemento visual, recortada a [from, from+dur) de su archivo.
 function visualInput(p, it, from, dur) {
   if (it.kind === 'image') return ['-loop', '1', '-framerate', String(p.fps), '-t', n(dur), '-i', it.file];
@@ -86,13 +106,14 @@ function visualInput(p, it, from, dur) {
 // ---------- un tramo ----------
 
 // Exporta el tramo [a, b) del timeline: vídeo (sin audio) a videoOut y audio PCM a audioOut.
-async function exportChunk({ p, items, a, b, enc, fast, videoOut, audioOut, scriptFile, signal, log }) {
+async function exportChunk({ p, items, a, b, enc, fast, videoOut, audioOut, scriptFile, signal, log, gainFile }) {
   const dur = b - a;
   const { width: W, height: H, fps } = p;
   const args = ['-y', '-hide_banner', '-loglevel', 'error'];
   const filters = [`color=c=black:s=${W}x${H}:r=${fps}:d=${n(dur)},format=yuv420p[base]`];
   let cur = 'base';
   const audioLabels = [];
+  const duckLabels = [];
   let idx = 0;
   for (const it of items) {
     const s = Math.max(it.start, a);
@@ -104,7 +125,8 @@ async function exportChunk({ p, items, a, b, enc, fast, videoOut, audioOut, scri
     if (it.visual) {
       args.push(...visualInput(p, it, from, len));
       const k = idx++;
-      filters.push(`[${k}:v]fps=${fps},${scaleFilter(p, it.fit)},format=rgba${zoomFilter(p, it)},setpts=PTS-STARTPTS+${n(local)}/TB[v${k}]`);
+      const zoom = isAnimated(it) ? zoomAnimFilter(p, it, s - it.start) : zoomFilter(p, it);
+      filters.push(`[${k}:v]fps=${fps},${scaleFilter(p, it.fit)},format=rgba${zoom},setpts=PTS-STARTPTS+${n(local)}/TB[v${k}]`);
       filters.push(`[${cur}][v${k}]overlay=x=(W-w)/2:y=(H-h)/2:eof_action=pass:enable='between(t,${n(local)},${n(local + len)})'[o${k}]`);
       cur = `o${k}`;
     }
@@ -118,11 +140,22 @@ async function exportChunk({ p, items, a, b, enc, fast, videoOut, audioOut, scri
       if (e === it.start + it.duration) fades.push(`afade=t=out:st=${n(len - f)}:d=${n(f)}`);
       const ms = Math.round(local * 1000);
       filters.push(`[${k}:a]volume=${n(it.volume ?? 1)}${fades.map((x) => ',' + x).join('')},adelay=${ms}:all=1[a${k}]`);
-      audioLabels.push(`a${k}`);
+      (it.duck != null ? duckLabels : audioLabels).push(`a${k}`);
     }
   }
   filters.push(`[${cur}]format=yuv420p[vout]`);
   const samples = Math.round(dur * 48000);
+  // música con ducking: se mezcla aparte y se multiplica por la curva de volumen de este tramo
+  if (duckLabels.length) {
+    args.push('-ss', n(a), '-t', n(dur), '-i', gainFile);
+    const g = idx++;
+    const fmt = 'aformat=sample_fmts=fltp:sample_rates=48000:channel_layouts=stereo';
+    const mix = duckLabels.length > 1 ? `${duckLabels.map((l) => `[${l}]`).join('')}amix=inputs=${duckLabels.length}:normalize=0:dropout_transition=0,` : `[${duckLabels[0]}]`;
+    filters.push(`${mix}${fmt},apad,atrim=end_sample=${samples}[mus]`);
+    filters.push(`[${g}:a]aresample=48000,${fmt},apad,atrim=end_sample=${samples}[gain]`);
+    filters.push(`[mus][gain]amultiply[ducked]`);
+    audioLabels.push('ducked');
+  }
   if (audioLabels.length > 1) filters.push(`${audioLabels.map((l) => `[${l}]`).join('')}amix=inputs=${audioLabels.length}:normalize=0:dropout_transition=0,apad,atrim=end_sample=${samples}[aout]`);
   else if (audioLabels.length === 1) filters.push(`[${audioLabels[0]}]apad,atrim=end_sample=${samples}[aout]`);
   else filters.push(`anullsrc=r=48000:cl=stereo,atrim=end_sample=${samples}[aout]`);
@@ -209,7 +242,31 @@ async function pool(tasks, size) {
 // ---------- exportación completa ----------
 
 function zoomOf(c) {
-  return { zoom: c.zoom, zoomX: c.zoomX, zoomY: c.zoomY };
+  return { zoom: c.zoom, zoomX: c.zoomX, zoomY: c.zoomY, zoomTo: c.zoomTo, zoomTime: c.zoomTime, clipDuration: c.duration };
+}
+
+// Curva de volumen de la música (ducking) para todo el timeline, en un WAV de 1000 Hz.
+async function writeGainFile(dir, p, file, log) {
+  const peaks = {};
+  for (const t of p.tracks) {
+    if (duckLevel(t) != null) continue;
+    for (const c of t.clips) if (!peaks[c.src] && (kindOf(c.src) === 'video' || kindOf(c.src) === 'audio') && p.assets[c.src]?.hasAudio !== false) peaks[c.src] = await computePeaks(dir, p, c.src).catch(() => null);
+  }
+  const act = voiceActivity(p, peaks);
+  const level = Math.min(...p.tracks.map(duckLevel).filter((x) => x != null));
+  const env = duckEnvelope(act, { level });
+  const rate = 1000;
+  const k = rate / PEAKS_RATE;
+  const pcm = new Int16Array(env.length * k);
+  for (let i = 0; i < pcm.length; i++) {
+    const f = i / k;
+    const i0 = Math.floor(f);
+    const v = env[i0] + ((env[Math.min(env.length - 1, i0 + 1)] ?? env[i0]) - env[i0]) * (f - i0);
+    pcm[i] = Math.round(Math.max(0, Math.min(1, v)) * 32767);
+  }
+  writeWav(file, pcm, rate);
+  log?.(`Ducking: música al ${Math.round(level * 100)} % cuando se habla (${Math.round((act.reduce((s, x) => s + x, 0) / Math.max(1, act.length)) * 100)} % del vídeo con voz)`);
+  return file;
 }
 
 function scaledProject(p, height) {
@@ -278,7 +335,7 @@ export async function exportProject({ dir, project: p0, out, renderHtml, onProgr
         }
         const file = resolveSrc(dir, c.src);
         if (audio && !audioSources.has(file)) audioSources.set(file, path.join(tmp, `src${audioSources.size}.wav`));
-        items.push({ ...zoomOf(c), kind, file, audioFile: audioSources.get(file), start: c.start, in: c.in, duration: c.duration, fit: c.fit, volume: c.volume, visual, audio });
+        items.push({ ...zoomOf(c), kind, file, audioFile: audioSources.get(file), start: c.start, in: c.in, duration: c.duration, fit: c.fit, volume: c.volume, visual, audio, duck: t.kind === 'audio' ? duckLevel(t) ?? undefined : undefined });
       }
     }
     let done = 0;
@@ -286,6 +343,8 @@ export async function exportProject({ dir, project: p0, out, renderHtml, onProgr
       report('audio', 'Preparando audio', done++ / audioSources.size);
       await ffmpegLogged(['-y', '-hide_banner', '-loglevel', 'error', '-i', file, '-vn', '-ac', '2', '-ar', '48000', '-c:a', 'pcm_s16le', wav], { signal, log });
     }
+
+    const gainFile = hasDucking(p0) ? await writeGainFile(dir, p0, path.join(tmp, 'gain.wav'), log) : null;
 
     // 3. tramos
     const chunks = planChunks(items, total, p.fps);
@@ -297,7 +356,7 @@ export async function exportProject({ dir, project: p0, out, renderHtml, onProgr
       chunks.map(([a, b], i) => async () => {
         if (signal?.aborted) throw new Error('Exportación cancelada');
         const inChunk = items.filter((it) => it.start < b && it.start + it.duration > a);
-        await exportChunk({ p, items: inChunk, a, b, enc, fast: conf.fast, videoOut: chunkFiles[i].v, audioOut: chunkFiles[i].a, scriptFile: path.join(tmp, `c${i}.txt`), signal, log });
+        await exportChunk({ p, items: inChunk, a, b, enc, fast: conf.fast, videoOut: chunkFiles[i].v, audioOut: chunkFiles[i].a, scriptFile: path.join(tmp, `c${i}.txt`), signal, log, gainFile });
         report('video', `Componiendo vídeo (${++finished}/${chunks.length})`, finished / chunks.length);
       }),
       PARALLEL_CHUNKS,
@@ -349,7 +408,7 @@ export async function exportFrame({ dir, project: p, t, out, renderHtmlFrame }) 
     if (kind === 'html') args.push('-i', await renderHtmlFrame(clip, local));
     else if (kind === 'image') args.push('-i', resolveSrc(dir, clip.src));
     else args.push('-ss', n(local), '-i', resolveSrc(dir, clip.src));
-    filters.push(`[${k}:v]${scaleFilter(p, clip.fit)},format=rgba${zoomFilter(p, zoomOf(clip))}[v${k}]`);
+    filters.push(`[${k}:v]${scaleFilter(p, clip.fit)},format=rgba${zoomFilter(p, { ...zoomOf(clip), zoom: zoomAt(clip, t - clip.start) })}[v${k}]`);
     filters.push(`[${cur}][v${k}]overlay=x=(W-w)/2:y=(H-h)/2[o${k}]`);
     cur = `o${k++}`;
   }
