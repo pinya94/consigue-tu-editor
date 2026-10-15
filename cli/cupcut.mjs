@@ -4,10 +4,10 @@
 import path from 'node:path';
 import fs from 'node:fs';
 import { spawn } from 'node:child_process';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { createRequire } from 'node:module';
 import * as P from '../core/project.mjs';
-import { findProjectDir, loadProject, saveProject, initProject, syncAssets, toSrc, clipSilences, resolveSrc } from '../core/media.mjs';
+import { findProjectDir, loadProject, saveProject, initProject, syncAssets, toSrc, clipSilences, resolveSrc, contactSheet, writeProjectGuide } from '../core/media.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const appRoot = path.resolve(here, '..');
@@ -26,7 +26,8 @@ Clips (tiempos en segundos o mm:ss.d)
   split <tiempo> [--clip c3]        Corta en ese instante (por defecto, todos los clips que pasan por ahí)
   trim <clip> [--start t] [--end t] Mueve los bordes del clip (en tiempo del timeline)
   move <clip> <tiempo> [--track v2]
-  set <clip> clave=valor ...        volume, fit, in, duration, start
+  set <clip> clave=valor ...        volume, fit, in, duration, start, zoom, zoomX, zoomY
+                                    zoom=1.2 acerca un 20 %; zoomX/zoomY (0-1) = hacia dónde (0.5 = centro)
   delete <clip> [<clip>...] [--ripple]   --ripple cierra el hueco
 
 Pistas
@@ -38,25 +39,33 @@ Silencios
   silences <clip> [--noise -35] [--min 0.5] [--pad 0.12]   Solo los lista
   silences <clip> ... --apply                              Los quita y cierra huecos
 
-Salida
+Ver el vídeo
+  sheet <clip> [--every 2] [--from t] [--to t]
+                                    Hojas de miniaturas con el segundo del timeline en cada una
   frame <tiempo> [--out archivo.png]  Fotograma compuesto (para ver cómo queda)
+
+Salida
   export [--out archivo.mp4]          Exporta el vídeo final
 `;
 
 // ---------- argumentos ----------
-const argv = process.argv.slice(2);
-const flags = {};
-const pos = [];
-for (let i = 0; i < argv.length; i++) {
-  const a = argv[i];
-  if (a.startsWith('--')) {
-    const key = a.slice(2);
-    const next = argv[i + 1];
-    if (next === undefined || (next.startsWith('--') && isNaN(Number(next)))) flags[key] = true;
-    else flags[key] = argv[++i];
-  } else pos.push(a);
+let flags = {};
+let pos = [];
+let cmd;
+function parseArgs(argv) {
+  flags = {};
+  pos = [];
+  for (let i = 0; i < argv.length; i++) {
+    const a = argv[i];
+    if (a.startsWith('--')) {
+      const key = a.slice(2);
+      const next = argv[i + 1];
+      if (next === undefined || (next.startsWith('--') && isNaN(Number(next)))) flags[key] = true;
+      else flags[key] = argv[++i];
+    } else pos.push(a);
+  }
+  cmd = pos.shift();
 }
-const cmd = pos.shift();
 
 function fail(msg) {
   console.error('Error: ' + msg);
@@ -137,6 +146,16 @@ function runElectron(args) {
 }
 
 // ---------- comandos ----------
+// Se puede llamar desde Node (node cli/cupcut.mjs ...) o desde la app instalada (CupCut.exe --cli ...).
+export async function run(argv) {
+  parseArgs(argv);
+  try {
+    await main();
+  } catch (e) {
+    fail(e.message);
+  }
+}
+
 async function main() {
   switch (cmd) {
     case undefined:
@@ -256,6 +275,31 @@ async function main() {
       return;
     }
 
+    case 'sheet': {
+      if (!pos[0]) fail('Indica el clip');
+      const dir = projectDir();
+      const p = (await syncAssets(dir, loadProject(dir))).project;
+      const f = P.findClip(p, pos[0]);
+      if (!f) fail(`No existe el clip ${pos[0]}`);
+      const every = num(flags.every) ?? 2;
+      const pages = await contactSheet(dir, p, f.clip, {
+        every,
+        from: flags.from !== undefined ? time(flags.from) : undefined,
+        to: flags.to !== undefined ? time(flags.to) : undefined,
+        out: path.join(dir, '.cupcut', 'sheets', f.clip.id),
+      });
+      console.log(`${pages.length} hojas de ${f.clip.id} (una miniatura cada ${every}s, 6x5 por hoja, el número es el segundo del timeline):`);
+      for (const pg of pages) console.log(`  ${pg.file}  (${s3(pg.from)} → ${s3(pg.to)})`);
+      return;
+    }
+
+    case 'guide': {
+      const dir = projectDir();
+      writeProjectGuide(dir);
+      console.log(`CLAUDE.md actualizado en ${dir}`);
+      return;
+    }
+
     case 'frame': {
       const dir = projectDir();
       const out = path.resolve(flags.out && flags.out !== true ? flags.out : path.join(dir, '.cupcut', `frame-${pos[0] || 0}.png`));
@@ -274,4 +318,4 @@ async function main() {
   }
 }
 
-main().catch((e) => fail(e.message));
+if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href) run(process.argv.slice(2));

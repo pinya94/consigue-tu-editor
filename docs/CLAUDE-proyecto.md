@@ -4,33 +4,42 @@ Esta carpeta es un proyecto del editor **CupCut**. El usuario edita en la app vi
 por código. Ambos trabajáis sobre el mismo archivo, `proyecto.json`. La app vigila ese archivo y
 muestra cada cambio al momento. Tus cambios se pueden deshacer con Ctrl+Z en la app.
 
+> Este archivo lo genera CupCut y se actualiza solo. Para notas propias del proyecto usa `NOTAS.md`.
+
 ## Cómo trabajar
 
-Usa la CLI (más segura que tocar el JSON, porque valida y lee la duración de los archivos):
+Usa la CLI. Es más segura que tocar el JSON porque valida y lee la duración de los archivos.
 
 ```bash
-node "{{CLI}}" info              # empieza siempre por aquí: pistas, clips con sus ids y medios
-node "{{CLI}}" help              # todos los comandos
+{{CUPCUT}} info              # empieza siempre por aquí: pistas, clips con sus ids y medios
+{{CUPCUT}} help              # todos los comandos
 ```
 
 Comandos habituales (los tiempos son segundos del timeline; también vale `1:02.5`):
 
 ```bash
-node "{{CLI}}" add media/toma1.mp4                     # al final de la primera pista de vídeo
-node "{{CLI}}" add media/titulo.html --track v2 --at 3  # animación encima, en el segundo 3
-node "{{CLI}}" split 12.4                              # corta todo lo que pase por 12.4
-node "{{CLI}}" trim c3 --start 5.2 --end 9             # mueve los bordes de un clip
-node "{{CLI}}" move c3 20 --track v2
-node "{{CLI}}" set c2 volume=0.3 fit=cover
-node "{{CLI}}" delete c4 --ripple                      # borra y cierra el hueco
-node "{{CLI}}" silences c1                             # lista los silencios
-node "{{CLI}}" silences c1 --apply                     # los quita (jump cuts)
-node "{{CLI}}" frame 12.5 --out .cupcut/f.png          # fotograma compuesto: míralo para comprobar
-node "{{CLI}}" export                                  # MP4 final en export/
+{{CUPCUT}} add media/toma1.mp4                       # al final de la primera pista de vídeo
+{{CUPCUT}} add media/titulo.html --track v2 --at 3   # animación encima, en el segundo 3
+{{CUPCUT}} split 12.4                                # corta todo lo que pase por 12.4
+{{CUPCUT}} trim c3 --start 5.2 --end 9               # mueve los bordes de un clip
+{{CUPCUT}} move c3 20 --track v2
+{{CUPCUT}} set c2 volume=0.3 fit=cover
+{{CUPCUT}} set c5 zoom=1.2 zoomX=0.5 zoomY=0.35      # acercamiento del 20 % hacia la cara
+{{CUPCUT}} delete c4 --ripple                        # borra y cierra el hueco
+{{CUPCUT}} silences c1                               # lista los silencios
+{{CUPCUT}} silences c1 --apply                       # los quita (jump cuts)
+{{CUPCUT}} sheet c1 --every 2                        # hojas de miniaturas para revisar el vídeo
+{{CUPCUT}} frame 12.5 --out .cupcut/f.png            # fotograma compuesto
+{{CUPCUT}} export                                    # MP4 final en export/
 ```
 
+**Para ver el vídeo**: `sheet` genera imágenes con 30 miniaturas cada una y el segundo del timeline
+marcado en cada miniatura. Léelas con tu herramienta de leer imágenes. `frame` sirve para comprobar
+un instante concreto con todas las capas, animaciones incluidas. Comprueba siempre tu trabajo así
+antes de darlo por bueno.
+
 Para cambios grandes también puedes editar `proyecto.json` directamente. Después ejecuta
-`node "{{CLI}}" check` para comprobar que no hay solapes ni errores.
+`{{CUPCUT}} check` para comprobar que no hay solapes ni errores.
 
 ## Formato de proyecto.json
 
@@ -50,27 +59,38 @@ Para cambios grandes también puedes editar `proyecto.json` directamente. Despu�
 
 - `start`: dónde empieza el clip en el timeline. `in`: desde qué segundo del archivo original.
   `duration`: cuánto dura.
-- Opcionales del clip: `volume` (1 = original), `fit` (`contain` | `cover` | `stretch`).
+- Opcionales del clip:
+  - `volume` (1 = original).
+  - `fit` (`contain` | `cover` | `stretch`).
+  - `zoom` (1 = normal, 1.2 = 20 % más cerca, máximo 5).
+  - `zoomX` y `zoomY`: punto hacia el que se acerca el zoom, de 0 a 1. `0.5, 0.5` es el centro;
+    `0.5, 0.3` apunta más arriba, donde suele estar la cara.
 - Opcionales de la pista: `muted`, `hidden`.
 - En una misma pista los clips no se pueden solapar.
 - `src` es relativo a esta carpeta. Los archivos que se guardan en `media/` aparecen solos en la app.
 
 ## Animaciones (HTML)
 
-Las animaciones son archivos `.html` en `media/`. CupCut los pinta encima del vídeo con
-transparencia, tanto en la preview como en la exportación (fotograma a fotograma).
+Las animaciones son archivos `.html` en `media/`. CupCut los pinta encima del vídeo, tanto en la
+preview como en la exportación (fotograma a fotograma).
 
 Reglas:
-1. El lienzo mide lo mismo que el proyecto (p. ej. `1920x1080`) y el fondo es **transparente**.
+1. El lienzo mide lo mismo que el proyecto (p. ej. `1920x1080`).
+   - **Superpuesta** (rótulos, flechas, textos encima de la persona): fondo `transparent`.
+   - **A pantalla completa** (tapa el vídeo): fondo opaco que cubra todo el lienzo.
 2. Declara la duración: `<meta name="cupcut-duration" content="4">`.
 3. Anima con **CSS** (`@keyframes`, `animation`) o con la Web Animations API. CupCut controla el
    reloj, así que no hace falta nada más. El segundo 0 del archivo es el inicio del clip.
 4. Si animas con JS (canvas, GSAP…), no uses `requestAnimationFrame` ni temporizadores para
    avanzar el tiempo. Define `window.cupcutSeek = (t) => { /* pinta el estado del segundo t */ }`.
    Debe ser determinista: el mismo `t` siempre da la misma imagen.
-5. Todo en local (sin CDNs): fuentes y librerías dentro de `media/` con rutas relativas.
+5. Todo en local, sin CDNs: fuentes y librerías dentro de `media/`, con rutas relativas.
+6. Pon las animaciones en una pista por encima del vídeo (`v2`; si hace falta, crea otra con
+   `track add video`).
+7. Si el clip dura más que la animación, la animación se queda congelada en su último estado. Ajusta
+   la duración del HTML a la del hueco que tiene que cubrir.
 
-Ejemplo mínimo:
+Ejemplo mínimo (superpuesta):
 
 ```html
 <!doctype html>
@@ -84,5 +104,29 @@ Ejemplo mínimo:
 <body><h1>Título</h1></body></html>
 ```
 
-Después: `node "{{CLI}}" add media/titulo.html --track v2 --at 3`. Comprueba cómo queda con
-`frame` y mirando el PNG.
+Después: `{{CUPCUT}} add media/titulo.html --track v2 --at 3`. Comprueba cómo queda con `frame` y
+mirando el PNG.
+
+## Recetas
+
+### Acercamientos (zoom) en los cortes
+
+En vídeos hablados, alterna el zoom entre clips consecutivos para que cada corte se note menos y el
+vídeo tenga ritmo. Por ejemplo: `1`, `1.15`, `1`, `1.2`… Centra el zoom en la cara: mira un
+fotograma, estima dónde está la cara (de 0 a 1 en horizontal y vertical) y úsalo como `zoomX`/`zoomY`.
+Para remarcar una frase importante, usa un zoom mayor (1.3) en ese clip.
+
+### Animación a pantalla completa cuando la persona no mira a cámara
+
+1. Revisa el vídeo con `sheet <clip> --every 1`, o `--every 0.5` para más precisión. Apunta los
+   tramos en los que la persona no mira a cámara: mira hacia abajo, a un lado, lee una pantalla…
+   Junta los tramos separados por menos de 1 s.
+2. A cada tramo añádele margen: empieza un poco antes y acaba un poco después. Por defecto,
+   **0,4 s antes y 0,4 s después**, para que el cambio no coincida con el movimiento de los ojos.
+3. Decide el contenido según lo que se dice en ese tramo. CupCut no transcribe el audio: usa una
+   transcripción si el usuario te la da, o pregúntale qué dice ahí. Crea una animación
+   **a pantalla completa** (fondo opaco) que ilustre lo que está diciendo. Dale la duración exacta
+   del tramo con margen.
+4. Colócala en `v2` con `--at` (inicio del tramo menos el margen) y `--duration`. El audio sigue
+   sonando debajo.
+5. Comprueba el principio, la mitad y el final de cada tramo con `frame`.

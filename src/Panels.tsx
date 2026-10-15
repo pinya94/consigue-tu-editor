@@ -107,6 +107,13 @@ function ClipInspector(props: InspectorProps & { clip: Clip; trackName: string }
         <Field label="Desde (s)" hint="Segundo del archivo original donde empieza el clip" value={clip.in} onCommit={(v) => props.update(clip.id, { in: num(v) })} />
         {(kind === 'video' || kind === 'audio') && <Field label="Volumen" hint="1 = original, 0 = silencio, 2 = doble" value={clip.volume ?? 1} onCommit={(v) => props.update(clip.id, { volume: num(v) })} />}
         {kind !== 'audio' && (
+          <>
+            <Field label="Zoom" hint="1 = normal, 1.2 = 20 % más cerca" value={clip.zoom ?? 1} onCommit={(v) => props.update(clip.id, { zoom: Math.max(1, Math.min(5, num(v))) })} />
+            <Field label="Enfoque X" hint="Hacia dónde se acerca el zoom: 0 = izquierda, 0.5 = centro, 1 = derecha" value={clip.zoomX ?? 0.5} onCommit={(v) => props.update(clip.id, { zoomX: Math.max(0, Math.min(1, num(v))) })} />
+            <Field label="Enfoque Y" hint="0 = arriba, 0.5 = centro, 1 = abajo" value={clip.zoomY ?? 0.5} onCommit={(v) => props.update(clip.id, { zoomY: Math.max(0, Math.min(1, num(v))) })} />
+          </>
+        )}
+        {kind !== 'audio' && (
           <label className="field">
             <span>Encaje</span>
             <select value={clip.fit || 'contain'} onChange={(e) => props.update(clip.id, { fit: e.target.value as Fit })}>

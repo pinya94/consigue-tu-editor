@@ -18,6 +18,19 @@ function scaleFilter(p, fit) {
   return `scale=${W}:${H}:force_original_aspect_ratio=decrease`;
 }
 
+// Zoom: se rellena hasta el tamaño del lienzo (transparente), se escala y se recorta alrededor
+// del punto de enfoque. Es lo mismo que hace la preview con transform: scale() + transform-origin.
+function zoomFilter(p, it) {
+  const z = it.zoom || 1;
+  if (z === 1) return '';
+  const { width: W, height: H } = p;
+  const zw = Math.round((W * z) / 2) * 2;
+  const zh = Math.round((H * z) / 2) * 2;
+  const x = Math.round((zw - W) * (it.zoomX ?? 0.5));
+  const y = Math.round((zh - H) * (it.zoomY ?? 0.5));
+  return `,pad=${W}:${H}:(ow-iw)/2:(oh-ih)/2:color=black@0,scale=${zw}:${zh},crop=${W}:${H}:${x}:${y}`;
+}
+
 // items: [{ kind, file, start, in, duration, fit, volume, audio: bool, visual: bool, prerendered: bool }]
 function buildArgs(p, items, total, { out, frame = false }) {
   const args = ['-y', '-hide_banner'];
@@ -32,7 +45,7 @@ function buildArgs(p, items, total, { out, frame = false }) {
     else args.push('-ss', n(it.in), '-t', n(it.duration), '-i', it.file);
     if (it.visual) {
       const v = `v${k}`;
-      filters.push(`[${k}:v]fps=${fps},${scaleFilter(p, it.fit)},format=rgba,setpts=PTS-STARTPTS+${n(it.start)}/TB[${v}]`);
+      filters.push(`[${k}:v]fps=${fps},${scaleFilter(p, it.fit)},format=rgba${zoomFilter(p, it)},setpts=PTS-STARTPTS+${n(it.start)}/TB[${v}]`);
       const end = it.start + it.duration;
       filters.push(`[${cur}][${v}]overlay=x=(W-w)/2:y=(H-h)/2:eof_action=pass:enable='between(t,${n(it.start)},${n(end)})'[o${k}]`);
       cur = `o${k}`;
@@ -92,6 +105,10 @@ function runFfmpeg(args, { total, onProgress, signal }) {
   });
 }
 
+function zoomOf(c) {
+  return { zoom: c.zoom, zoomX: c.zoomX, zoomY: c.zoomY };
+}
+
 function visualTracks(p) {
   return p.tracks.filter((t) => t.kind === 'video' && !t.hidden);
 }
@@ -122,9 +139,9 @@ export async function exportProject({ dir, project: p, out, renderHtml, onProgre
       const audio = !t.muted && (kind === 'audio' || (kind === 'video' && asset.hasAudio)) && (c.volume ?? 1) > 0;
       if (!visual && !audio) continue;
       if (kind === 'html') {
-        items.push({ kind, file: rendered.get(c.id), prerendered: true, start: c.start, in: 0, duration: c.duration, fit: c.fit, visual, audio: false });
+        items.push({ ...zoomOf(c), kind, file: rendered.get(c.id), prerendered: true, start: c.start, in: 0, duration: c.duration, fit: c.fit, visual, audio: false });
       } else {
-        items.push({ kind, file: resolveSrc(dir, c.src), start: c.start, in: c.in, duration: c.duration, fit: c.fit, volume: c.volume, visual, audio });
+        items.push({ ...zoomOf(c), kind, file: resolveSrc(dir, c.src), start: c.start, in: c.in, duration: c.duration, fit: c.fit, volume: c.volume, visual, audio });
       }
     }
   }
@@ -143,11 +160,11 @@ export async function exportFrame({ dir, project: p, t, out, renderHtmlFrame }) 
     const kind = kindOf(clip.src);
     const local = clip.in + (t - clip.start);
     if (kind === 'html') {
-      items.push({ kind: 'image', file: await renderHtmlFrame(clip, local), start: 0, duration: 1 / p.fps, visual: true, fit: clip.fit });
+      items.push({ ...zoomOf(clip), kind: 'image', file: await renderHtmlFrame(clip, local), start: 0, duration: 1 / p.fps, visual: true, fit: clip.fit });
     } else if (kind === 'image') {
-      items.push({ kind, file: resolveSrc(dir, clip.src), start: 0, duration: 1 / p.fps, visual: true, fit: clip.fit });
+      items.push({ ...zoomOf(clip), kind, file: resolveSrc(dir, clip.src), start: 0, duration: 1 / p.fps, visual: true, fit: clip.fit });
     } else {
-      items.push({ kind, file: resolveSrc(dir, clip.src), start: 0, in: local, duration: 1, visual: true, fit: clip.fit });
+      items.push({ ...zoomOf(clip), kind, file: resolveSrc(dir, clip.src), start: 0, in: local, duration: 1, visual: true, fit: clip.fit });
     }
   }
   fs.mkdirSync(path.dirname(out), { recursive: true });

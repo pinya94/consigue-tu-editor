@@ -7,10 +7,11 @@
 //   assets: { "<src>": { kind, duration, width, height, hasAudio } },   // metadatos cacheados
 //   tracks: [   // de abajo a arriba: la última pista se pinta encima
 //     { id, kind: "video" | "audio", name, muted?, hidden?,
-//       clips: [ { id, src, start, in, duration, volume?, fit? } ] }
+//       clips: [ { id, src, start, in, duration, volume?, fit?, zoom?, zoomX?, zoomY? } ] }
 //   ]
 // }
 // Tiempos en segundos. start = posición en el timeline, in = desde qué segundo del archivo fuente.
+// zoom: 1 = normal, 1.2 = acercamiento del 20 %; zoomX/zoomY (0-1) = punto hacia el que se acerca.
 
 export const PROJECT_FILE = 'proyecto.json';
 export const VERSION = 1;
@@ -370,6 +371,7 @@ export function validate(p) {
       else if (trackKindFor(kind) !== t.kind) problems.push(`${c.id}: un ${kind} no puede ir en la pista de ${t.kind} ${t.id}`);
       if (!p.assets[c.src]) problems.push(`${c.id}: falta información del archivo ${c.src}`);
       else if (p.assets[c.src].missing) problems.push(`${c.id}: no se encuentra el archivo ${c.src}`);
+      if (c.zoom != null && !(c.zoom >= 1 && c.zoom <= 5)) problems.push(`${c.id}: zoom debe estar entre 1 y 5`);
       const sd = sourceDuration(p, c.src);
       if (c.in + c.duration > sd + 0.01) problems.push(`${c.id}: se sale del final del archivo fuente (${sd}s)`);
       const next = t.clips[i + 1];

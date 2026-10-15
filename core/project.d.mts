@@ -21,6 +21,9 @@ export interface Clip {
   duration: number;
   volume?: number;
   fit?: Fit;
+  zoom?: number; // 1 = sin zoom, 1.2 = 20 % más cerca
+  zoomX?: number; // punto de enfoque del zoom, 0-1 (0.5 = centro)
+  zoomY?: number;
 }
 export interface Track {
   id: string;

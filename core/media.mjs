@@ -85,14 +85,49 @@ export function initProject(dir, opts = {}) {
   return p;
 }
 
-// Copia la guía para Claude dentro de la carpeta del proyecto.
+const GUIDE_MARK = '<!-- cupcut:auto -->';
+
+// Comando con el que Claude llama a la CLI: el .exe instalado, o node + el script en desarrollo.
+export function cliCommand() {
+  const packaged = process.versions.electron && !process.defaultApp;
+  if (packaged) return `"${process.execPath.replaceAll('\\', '/')}" --cli`;
+  const here = path.dirname(fileURLToPath(import.meta.url));
+  return `node "${path.resolve(here, '..', 'cli', 'cupcut.mjs').replaceAll('\\', '/')}"`;
+}
+
+// Copia la guía para Claude dentro de la carpeta del proyecto. Si ya hay un CLAUDE.md escrito por
+// otra persona (sin la marca automática) no se toca.
 export function writeProjectGuide(dir) {
   const here = path.dirname(fileURLToPath(import.meta.url));
   const template = path.join(here, '..', 'docs', 'CLAUDE-proyecto.md');
   if (!fs.existsSync(template)) return;
-  const cli = path.resolve(here, '..', 'cli', 'cupcut.mjs');
-  const text = fs.readFileSync(template, 'utf8').replaceAll('{{CLI}}', cli.replaceAll('\\', '/'));
-  fs.writeFileSync(path.join(dir, 'CLAUDE.md'), text);
+  const target = path.join(dir, 'CLAUDE.md');
+  // (las versiones antiguas no tenían la marca, pero empezaban con este título)
+  const ours = (t) => t.includes(GUIDE_MARK) || t.startsWith('# Proyecto de vídeo CupCut');
+  if (fs.existsSync(target) && !ours(fs.readFileSync(target, 'utf8'))) return;
+  const text = GUIDE_MARK + '\n' + fs.readFileSync(template, 'utf8').replaceAll('{{CUPCUT}}', cliCommand());
+  if (fs.existsSync(target) && fs.readFileSync(target, 'utf8') === text) return;
+  fs.writeFileSync(target, text);
+}
+
+// Hoja de miniaturas de un clip: cuadrículas con el segundo del timeline marcado en cada fotograma.
+// Sirve para que Claude revise un vídeo largo de un vistazo (p. ej. dónde no se mira a cámara).
+export async function contactSheet(dir, p, clip, { every = 2, from, to, cols = 6, rows = 5, out }) {
+  const start = Math.max(clip.start, from ?? clip.start);
+  const end = Math.min(clip.start + clip.duration, to ?? clip.start + clip.duration);
+  if (end <= start) throw new Error('El rango está fuera del clip');
+  fs.mkdirSync(path.dirname(out), { recursive: true });
+  for (const f of fs.readdirSync(path.dirname(out))) {
+    if (f.startsWith(path.basename(out) + '-')) fs.rmSync(path.join(path.dirname(out), f));
+  }
+  const font = 'C:/Windows/Fonts/arial.ttf';
+  const fontArg = fs.existsSync(font) ? `fontfile='C\\:/Windows/Fonts/arial.ttf':` : '';
+  const label = `drawtext=${fontArg}text='%{eif\\:floor(t+${start})\\:d}.%{eif\\:mod(floor((t+${start})*10)\\,10)\\:d}s':x=8:y=8:fontsize=26:fontcolor=white:box=1:boxcolor=black@0.65:boxborderw=6`;
+  const vf = `fps=1/${every},scale=320:-2,${label},tile=${cols}x${rows}:padding=4:margin=4`;
+  await run(ffmpegPath, ['-y', '-hide_banner', '-loglevel', 'error', '-ss', String(clip.in + (start - clip.start)), '-t', String(end - start), '-i', resolveSrc(dir, clip.src), '-vf', vf, '-an', `${out}-%02d.png`]);
+  const perPage = cols * rows * every;
+  const pages = fs.readdirSync(path.dirname(out)).filter((f) => f.startsWith(path.basename(out) + '-')).sort();
+  return pages.map((f, i) => ({ file: path.join(path.dirname(out), f), from: start + i * perPage, to: Math.min(end, start + (i + 1) * perPage) }));
 }
 
 // Ruta absoluta de un src (relativo a la carpeta del proyecto o absoluto).

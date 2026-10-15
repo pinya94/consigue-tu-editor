@@ -2,11 +2,12 @@
 // También tiene un modo sin ventana (--cli) que usa la CLI para exportar y sacar fotogramas.
 import { app, BrowserWindow, ipcMain, dialog, shell, Menu } from 'electron';
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { startMediaServer } from './server.mjs';
 import { makeHtmlRenderer } from './htmlRender.mjs';
-import { loadProject, saveProject, initProject, syncAssets, toSrc, probe, clipSilences, projectFile, findProjectDir, serialize } from '../core/media.mjs';
+import { loadProject, saveProject, initProject, syncAssets, toSrc, probe, clipSilences, projectFile, findProjectDir, serialize, writeProjectGuide } from '../core/media.mjs';
 import { exportProject, exportFrame } from '../core/export.mjs';
 import { findClip, kindOf, parseTime, PROJECT_FILE } from '../core/project.mjs';
 
@@ -54,6 +55,9 @@ async function openProject(dir) {
   p = synced.project;
   current = { dir, lastWritten: fs.readFileSync(projectFile(dir), 'utf8'), watcher: null };
   if (synced.changed) write(p);
+  try {
+    writeProjectGuide(dir); // mantiene al día las instrucciones para Claude
+  } catch {}
   watch(dir);
   rememberProject(dir);
   win?.setTitle(`${p.name} — CupCut`);
@@ -224,8 +228,8 @@ function registerIpc() {
 }
 
 // ---------- Modo CLI (sin ventana) ----------
-// electron . --cli export --project <dir> [--out <archivo.mp4>]
-// electron . --cli frame  --project <dir> --time <t> --out <archivo.png>
+// CupCut.exe --cli <comando> ...   (en desarrollo: electron . --cli <comando> ...)
+// export y frame necesitan Chromium para las animaciones y se resuelven aquí; el resto lo hace cli/cupcut.mjs.
 
 function arg(name) {
   const i = process.argv.indexOf('--' + name);
@@ -233,8 +237,15 @@ function arg(name) {
 }
 
 async function runCli() {
-  const cmd = process.argv[process.argv.indexOf('--cli') + 1];
-  const dir = path.resolve(arg('project') || '.');
+  const args = process.argv.slice(process.argv.indexOf('--cli') + 1);
+  const cmd = args[0];
+  if (cmd !== 'export' && cmd !== 'frame') {
+    const { run } = await import('../cli/cupcut.mjs');
+    await run(args);
+    return;
+  }
+  const dir = arg('project') ? path.resolve(arg('project')) : findProjectDir();
+  if (!dir) throw new Error('No hay proyecto.json aquí. Usa --project <carpeta>.');
   let p = loadProject(dir);
   p = (await syncAssets(dir, p)).project;
   const { renderHtml, renderHtmlFrame } = makeHtmlRenderer({ dir, project: p, urlFor: media.urlFor });
@@ -252,7 +263,7 @@ async function runCli() {
     console.log(`Exportado: ${out}`);
   } else if (cmd === 'frame') {
     const out = path.resolve(arg('out') || path.join(dir, '.cupcut', 'frame.png'));
-    await exportFrame({ dir, project: p, t: parseTime(arg('time') || '0'), out, renderHtmlFrame });
+    await exportFrame({ dir, project: p, t: parseTime(arg('time') || args[1] || '0'), out, renderHtmlFrame });
     console.log(`Fotograma: ${out}`);
   } else {
     throw new Error(`Comando desconocido: ${cmd}`);
@@ -261,6 +272,9 @@ async function runCli() {
 
 // ---------- Arranque ----------
 
+// La CLI y las capturas usan su propia carpeta de datos: así no chocan con la app abierta
+// ni cambian la lista de proyectos recientes.
+if (cliMode || process.env.CUPCUT_SNAPSHOT) app.setPath('userData', path.join(os.tmpdir(), 'cupcut-aux'));
 if (cliMode) app.disableHardwareAcceleration();
 
 app.whenReady().then(async () => {

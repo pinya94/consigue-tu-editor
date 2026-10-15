@@ -6,6 +6,12 @@ import { useTime, usePlaying } from './clock';
 
 const PRELOAD_AHEAD = 3; // segundos: se carga por adelantado el siguiente clip de cada pista
 
+// Mismo cálculo que en la exportación: escalar alrededor del punto de enfoque
+function zoomStyle(c: Clip): React.CSSProperties {
+  if (!c.zoom || c.zoom === 1) return {};
+  return { transform: `scale(${c.zoom})`, transformOrigin: `${(c.zoomX ?? 0.5) * 100}% ${(c.zoomY ?? 0.5) * 100}%` };
+}
+
 const objectFit = (fit?: Fit) => (fit === 'cover' ? 'cover' : fit === 'stretch' ? 'fill' : 'contain');
 
 interface LayerInfo {
@@ -61,7 +67,7 @@ export function Preview({ project, dir, base }: { project: Project; dir: string;
           const kind = kindOf(l.clip.src);
           const asset = project.assets[l.clip.src];
           const url = mediaUrl(base, dir, l.clip.src, kind === 'html' ? asset?.mtime : undefined);
-          const style = { visibility: l.visible ? 'visible' : 'hidden', objectFit: objectFit(l.clip.fit) } as const;
+          const style = { visibility: l.visible ? 'visible' : 'hidden', objectFit: objectFit(l.clip.fit), ...zoomStyle(l.clip) } as const;
           const volume = Math.max(0, Math.min(1, l.clip.volume ?? 1));
           if (kind === 'video' || kind === 'audio')
             return (
@@ -78,7 +84,7 @@ export function Preview({ project, dir, base }: { project: Project; dir: string;
             );
           if (l.track.kind !== 'video') return null;
           if (kind === 'image') return <img key={l.key} className="layer" src={url} style={style} draggable={false} />;
-          if (kind === 'html') return <HtmlLayer key={l.key} url={url} local={l.local} visible={l.visible} />;
+          if (kind === 'html') return <HtmlLayer key={l.key} url={url} local={l.local} visible={l.visible} zoom={zoomStyle(l.clip)} />;
           return null;
         })}
       </div>
@@ -118,7 +124,7 @@ const MediaLayer = memo(function MediaLayer(props: {
   return <video ref={ref} className="layer" src={props.url} preload="auto" playsInline style={props.style} />;
 });
 
-function HtmlLayer({ url, local, visible }: { url: string; local: number; visible: boolean }) {
+function HtmlLayer({ url, local, visible, zoom }: { url: string; local: number; visible: boolean; zoom: React.CSSProperties }) {
   const ref = useRef<HTMLIFrameElement>(null);
   const localRef = useRef(local);
   localRef.current = local;
@@ -138,5 +144,5 @@ function HtmlLayer({ url, local, visible }: { url: string; local: number; visibl
     return () => window.removeEventListener('message', onMsg);
   }, []);
 
-  return <iframe ref={ref} className="layer html-layer" src={url} style={{ visibility: visible ? 'visible' : 'hidden' }} tabIndex={-1} />;
+  return <iframe ref={ref} className="layer html-layer" src={url} style={{ visibility: visible ? 'visible' : 'hidden', ...zoom }} tabIndex={-1} />;
 }

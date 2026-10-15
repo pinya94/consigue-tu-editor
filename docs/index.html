@@ -1,0 +1,278 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>CupCut</title>
+<meta name="description" content="Editor de vídeo de escritorio para editar a medias con Claude. Gratis, para Windows." />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,800&family=Figtree:wght@400;600&family=JetBrains+Mono:wght@400;600&display=swap" />
+<style>
+  /* Layout: una columna estrecha de lectura; el hero es una maqueta del timeline de la app, con la cabeza lectora en marcha. */
+  :root {
+    --bg: #f3f5f6;
+    --surface: #ffffff;
+    --fg: #14171c;
+    --muted: #5b6370;
+    --line: #dde2e7;
+    --accent: #0f9d93;
+    --accent-ink: #ffffff;
+    --clip-video: #3b6fd8;
+    --clip-anim: #d8892f;
+    --clip-audio: #2f9e6e;
+    --silence: rgba(220, 70, 85, 0.55);
+    --f-display: 'Bricolage Grotesque', 'Segoe UI', system-ui, sans-serif;
+    --f-body: 'Figtree', 'Segoe UI', system-ui, sans-serif;
+    --f-mono: 'JetBrains Mono', Consolas, ui-monospace, monospace;
+    color-scheme: light;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme='light']) {
+      --bg: #121418; --surface: #1b1e24; --fg: #e8eaee; --muted: #949aa6; --line: #2c3038;
+      --accent: #22d3c5; --accent-ink: #06201e; --silence: rgba(255, 93, 108, 0.5);
+      color-scheme: dark;
+    }
+  }
+  :root[data-theme='dark'] {
+    --bg: #121418; --surface: #1b1e24; --fg: #e8eaee; --muted: #949aa6; --line: #2c3038;
+    --accent: #22d3c5; --accent-ink: #06201e; --silence: rgba(255, 93, 108, 0.5);
+    color-scheme: dark;
+  }
+
+  * { box-sizing: border-box; }
+  html { padding-block: env(safe-area-inset-top, 0px) env(safe-area-inset-bottom, 0px); }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--fg);
+    font: 17px/1.6 var(--f-body);
+    padding-inline: 20px;
+  }
+  .wrap { max-width: 980px; margin-inline: auto; padding-block: 28px 64px; display: flex; flex-direction: column; gap: 72px; }
+  a { color: inherit; }
+  h1, h2 { font-family: var(--f-display); text-wrap: balance; margin: 0; letter-spacing: -0.02em; }
+  h2 { font-size: clamp(26px, 4vw, 34px); font-weight: 800; }
+  p { margin: 0; }
+  .muted { color: var(--muted); }
+  .label { font: 600 12px/1 var(--f-mono); letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
+
+  /* cabecera */
+  .top { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+  .brand { font: 800 22px var(--f-display); letter-spacing: -0.03em; text-decoration: none; }
+  .brand span { color: var(--accent); }
+  .top nav { display: flex; gap: 20px; font-size: 15px; }
+  .top nav a { text-decoration: none; color: var(--muted); }
+  .top nav a:hover { color: var(--fg); }
+
+  /* hero */
+  .hero { display: flex; flex-direction: column; gap: 28px; }
+  .hero h1 { font-size: clamp(44px, 8.5vw, 92px); font-weight: 800; line-height: 0.95; }
+  .hero h1 em { font-style: normal; color: var(--accent); }
+  .lead { font-size: clamp(18px, 2.2vw, 21px); max-width: 60ch; color: var(--muted); }
+  .cta { display: flex; flex-wrap: wrap; align-items: center; gap: 14px 22px; }
+  .btn {
+    display: inline-flex; align-items: center; gap: 10px;
+    background: var(--accent); color: var(--accent-ink);
+    font: 600 17px var(--f-body); text-decoration: none;
+    padding: 14px 24px; border-radius: 10px;
+  }
+  .btn:hover { filter: brightness(1.08); }
+  .btn:focus-visible, a:focus-visible { outline: 3px solid var(--accent); outline-offset: 3px; }
+  .btn svg { width: 18px; height: 18px; }
+  .cta small { font: 13px var(--f-mono); color: var(--muted); }
+
+  /* maqueta del timeline */
+  .tl {
+    background: var(--surface); border: 1px solid var(--line); border-radius: 14px;
+    padding: 14px 16px 18px; overflow: hidden;
+  }
+  .tl-head { display: flex; justify-content: space-between; gap: 12px; font: 13px var(--f-mono); color: var(--muted); margin-bottom: 12px; }
+  .tl-head b { color: var(--fg); font-weight: 600; font-variant-numeric: tabular-nums; }
+  .tl-body { display: grid; grid-template-columns: 44px 1fr; row-gap: 8px; column-gap: 10px; position: relative; }
+  .tl-id { font: 12px var(--f-mono); color: var(--muted); align-self: center; }
+  .lane { position: relative; height: 38px; }
+  .lane.audio { height: 26px; }
+  .clip {
+    position: absolute; top: 0; bottom: 0; border-radius: 6px;
+    font: 12px var(--f-mono); color: #fff; padding: 4px 8px; white-space: nowrap; overflow: hidden;
+  }
+  .clip.v { background: var(--clip-video); }
+  .clip.anim { background: var(--clip-anim); }
+  .clip.a { background: var(--clip-audio); }
+  .sil { position: absolute; top: 0; bottom: 0; background: repeating-linear-gradient(45deg, var(--silence), var(--silence) 4px, transparent 4px, transparent 8px); }
+  .playhead { position: absolute; top: -6px; bottom: -6px; left: 54px; width: 2px; background: var(--accent); animation: play 9s linear infinite; }
+  @keyframes play { from { left: 54px; } to { left: calc(100% - 2px); } }
+  @media (prefers-reduced-motion: reduce) { .playhead { animation: none; left: 38%; } }
+  .tl-cmd { margin-top: 16px; font: 13px/1.5 var(--f-mono); color: var(--muted); border-top: 1px dashed var(--line); padding-top: 12px; overflow-x: auto; white-space: nowrap; }
+  .tl-cmd span { color: var(--accent); }
+
+  /* bloques */
+  section { display: flex; flex-direction: column; gap: 26px; }
+  .features { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 28px 36px; }
+  .feature { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+  .feature h3 { margin: 0; font: 600 19px var(--f-body); }
+  .feature p { color: var(--muted); font-size: 16px; }
+  .feature .label { color: var(--accent); }
+
+  .steps { list-style: none; margin: 0; padding: 0; display: grid; gap: 22px; counter-reset: s; }
+  .steps li { display: grid; grid-template-columns: 44px 1fr; gap: 14px; counter-increment: s; min-width: 0; }
+  .steps li::before {
+    content: counter(s); font: 800 28px/1 var(--f-display); color: var(--accent);
+  }
+  .steps h3 { margin: 0 0 4px; font: 600 18px var(--f-body); }
+  .steps p { color: var(--muted); font-size: 16px; }
+  code { font: 14px var(--f-mono); background: var(--surface); border: 1px solid var(--line); padding: 1px 6px; border-radius: 5px; }
+
+  .prompts { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 14px; }
+  .prompt {
+    background: var(--surface); border: 1px solid var(--line); border-radius: 12px;
+    padding: 16px 18px; font-size: 16px; min-width: 0;
+  }
+  .prompt::before { content: '> '; font-family: var(--f-mono); color: var(--accent); }
+
+  .req { display: flex; flex-wrap: wrap; gap: 10px 28px; font: 14px var(--f-mono); color: var(--muted); }
+  .req b { color: var(--fg); font-weight: 600; }
+
+  .final { align-items: flex-start; }
+  footer { border-top: 1px solid var(--line); padding-top: 22px; display: flex; flex-wrap: wrap; justify-content: space-between; gap: 12px; font-size: 14px; color: var(--muted); }
+
+  @media (max-width: 560px) {
+    .top nav { display: none; }
+    .tl-head span:last-child { display: none; }
+    .wrap { gap: 56px; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <a class="brand" href="#">Cup<span>Cut</span></a>
+    <nav>
+      <a href="#como">Cómo funciona</a>
+      <a href="#claude">Con Claude</a>
+      <a class="repo-link" href="#">GitHub</a>
+    </nav>
+  </header>
+
+  <main class="hero">
+    <h1>Tú cortas.<br /><em>Claude</em> hace el resto.</h1>
+    <p class="lead">
+      CupCut es un editor de vídeo de escritorio, sencillo y gratuito, pensado para editar a medias con Claude.
+      Tú montas el vídeo con el ratón. Claude quita silencios, mete zooms y crea animaciones sobre el mismo
+      proyecto, y lo ves aparecer en tu pantalla al momento.
+    </p>
+    <div class="cta">
+      <a class="btn download-link" href="#">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4v12m0 0-5-5m5 5 5-5M5 20h14" /></svg>
+        Descargar para Windows
+      </a>
+      <small>Gratis · instalador de ~150 MB · FFmpeg incluido</small>
+    </div>
+
+    <div class="tl" aria-label="Ejemplo de timeline de CupCut">
+      <div class="tl-head">
+        <span>entrevista.mp4 · 1920×1080 · 30 fps</span>
+        <span><b>00:00:42:18</b> / 00:03:10:00</span>
+      </div>
+      <div class="tl-body">
+        <span class="tl-id">v2</span>
+        <div class="lane">
+          <div class="clip anim" style="left:6%;width:16%">c7 titulo.html</div>
+          <div class="clip anim" style="left:47%;width:21%">c9 grafico.html</div>
+        </div>
+        <span class="tl-id">v1</span>
+        <div class="lane">
+          <div class="clip v" style="left:0;width:31%">c1 toma1.mp4</div>
+          <div class="clip v" style="left:31.3%;width:24%">c4 · zoom 1.15</div>
+          <div class="clip v" style="left:55.6%;width:44.4%">c5 toma1.mp4</div>
+          <div class="sil" style="left:76%;width:6%"></div>
+          <div class="sil" style="left:90%;width:4%"></div>
+        </div>
+        <span class="tl-id">a1</span>
+        <div class="lane audio">
+          <div class="clip a" style="left:0;width:100%">c2 musica.mp3 · vol 0.3</div>
+        </div>
+        <div class="playhead" aria-hidden="true"></div>
+      </div>
+      <div class="tl-cmd"><span>claude ›</span> cupcut silences c5 --apply &nbsp;·&nbsp; 2 silencios quitados (1.8 s)</div>
+    </div>
+  </main>
+
+  <section id="como">
+    <span class="label">Qué hace</span>
+    <h2>Lo justo para montar, y todo legible para Claude</h2>
+    <div class="features">
+      <div class="feature">
+        <span class="label">Timeline</span>
+        <h3>Edición de toda la vida</h3>
+        <p>Pistas de vídeo y audio, cortar con S, recortar arrastrando los bordes, imanes, deshacer y exportar a MP4.</p>
+      </div>
+      <div class="feature">
+        <span class="label">proyecto.json</span>
+        <h3>Un proyecto que se lee como texto</h3>
+        <p>Todo el montaje vive en un JSON legible. Claude lo edita por código y la app recoge cada cambio en directo.</p>
+      </div>
+      <div class="feature">
+        <span class="label">HTML + CSS</span>
+        <h3>Animaciones hechas con código</h3>
+        <p>Rótulos con transparencia o animaciones a pantalla completa. Claude las escribe y CupCut las pinta encima del vídeo.</p>
+      </div>
+      <div class="feature">
+        <span class="label">−35 dB</span>
+        <h3>Fuera silencios</h3>
+        <p>Detecta las pausas, las marca en rojo en el timeline y las quita con un clic, dejando un pequeño margen para no comerse sílabas.</p>
+      </div>
+      <div class="feature">
+        <span class="label">zoom 1.2</span>
+        <h3>Zoom en los cortes</h3>
+        <p>Cada clip tiene su zoom y su punto de enfoque. Alternarlo entre cortes da ritmo a los vídeos hablados.</p>
+      </div>
+      <div class="feature">
+        <span class="label">sheet</span>
+        <h3>Claude ve tu vídeo</h3>
+        <p>Hojas de miniaturas con el segundo marcado, para encontrar dónde no miras a cámara y taparlo con una animación.</p>
+      </div>
+    </div>
+  </section>
+
+  <section id="claude">
+    <span class="label">Empezar</span>
+    <h2>De cero a editar con Claude</h2>
+    <ol class="steps">
+      <li><div><h3>Instala CupCut</h3><p>Descarga el instalador y ábrelo. Si Windows avisa de que la app no está firmada, pulsa <em>Más información → Ejecutar de todas formas</em>.</p></div></li>
+      <li><div><h3>Crea un proyecto</h3><p>Pulsa <em>Nuevo proyecto</em>, elige una carpeta vacía y arrastra tus vídeos al timeline. CupCut deja en la carpeta un <code>CLAUDE.md</code> con todo lo que Claude necesita saber.</p></div></li>
+      <li><div><h3>Abre Claude en esa carpeta</h3><p>Clic derecho en la carpeta → <em>Abrir en Terminal</em> → escribe <code>claude</code>. Necesitas <a href="https://claude.com/claude-code">Claude Code</a>.</p></div></li>
+      <li><div><h3>Pide lo que quieras</h3><p>Con CupCut abierto delante, verás los cambios en directo. Si algo no te gusta, Ctrl+Z.</p></div></li>
+    </ol>
+    <div class="prompts">
+      <div class="prompt">Quita todos los silencios del vídeo principal.</div>
+      <div class="prompt">Alterna el zoom en los cortes, 15 % más cerca y centrado en mi cara.</div>
+      <div class="prompt">Donde no mire a cámara, pon una animación a pantalla completa que empiece un poco antes y acabe un poco después.</div>
+      <div class="prompt">Haz un rótulo animado con el título del vídeo en el segundo 2 y expórtalo.</div>
+    </div>
+  </section>
+
+  <section class="final">
+    <h2>Pruébalo con tu próximo vídeo</h2>
+    <div class="req"><span><b>Windows</b> 10 u 11</span><span><b>Claude Code</b> para la parte con Claude</span><span><b>Código abierto</b></span></div>
+    <a class="btn download-link" href="#">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4v12m0 0-5-5m5 5 5-5M5 20h14" /></svg>
+      Descargar CupCut
+    </a>
+  </section>
+
+  <footer>
+    <span>CupCut · editor de vídeo para trabajar con Claude</span>
+    <a class="repo-link" href="#">Código y documentación en GitHub</a>
+  </footer>
+</div>
+<script>
+  // Repositorio de GitHub donde se publican las versiones. Cámbialo por el tuyo.
+  const REPO = 'TU-USUARIO/cupcut';
+  const base = 'https://github.com/' + REPO;
+  document.querySelectorAll('.download-link').forEach((a) => (a.href = base + '/releases/latest/download/CupCut-Setup.exe'));
+  document.querySelectorAll('.repo-link').forEach((a) => (a.href = base));
+</script>
+</body>
+</html>
