@@ -242,19 +242,74 @@ export async function detectSilences(file, { noise = -35, minDuration = 0.5, fro
   return ranges;
 }
 
-// Silencios de un clip, ya convertidos a tiempo del timeline y con margen (pad) para no cortar sílabas.
-export async function clipSilences(dir, p, clip, { noise = -35, minDuration = 0.5, pad = 0.12 } = {}) {
+// Umbral de silencio adaptado al clip: mide el nivel en ventanas de 50 ms, toma el ruido de fondo
+// (percentil 10) y el nivel de voz (percentil 90), y pone el umbral a un tercio del camino.
+export async function autoNoiseThreshold(file, from, to) {
+  const args = ['-hide_banner', '-nostats', '-ss', String(from), '-t', String(to - from), '-i', file, '-vn',
+    '-af', 'aresample=16000,asetnsamples=n=800,astats=metadata=1:reset=1:measure_perchannel=none:measure_overall=RMS_level,ametadata=print:key=lavfi.astats.Overall.RMS_level',
+    '-f', 'null', '-'];
+  const { err } = await run(ffmpegPath, args);
+  const levels = [...err.matchAll(/RMS_level=(-?[\d.]+|-inf)/g)].map((m) => (m[1] === '-inf' ? -100 : Number(m[1]))).filter(Number.isFinite).sort((a, b) => a - b);
+  if (levels.length < 20) return -35;
+  const floor = levels[Math.floor(levels.length * 0.1)];
+  const speech = levels[Math.floor(levels.length * 0.9)];
+  const threshold = floor + Math.max(6, (speech - floor) / 3);
+  return Math.round(Math.max(-60, Math.min(-20, threshold)));
+}
+
+// Silencios de un clip que conviene quitar, ya en tiempo del timeline.
+// Reglas para que los cortes no queden bruscos:
+//  - margen asimétrico: poco antes de empezar a hablar (padBefore) y más después de hablar (padAfter),
+//    para no comerse finales de palabra ni respiraciones;
+//  - solo silencios de al menos minDuration (las pausas naturales se quedan);
+//  - ningún trozo hablado puede quedar más corto que minClip: si pasaría, ese silencio no se quita.
+export async function clipSilences(dir, p, clip, opts = {}) {
+  const { minDuration = 0.6, minClip = 0.8 } = opts;
+  const padBefore = opts.padBefore ?? opts.pad ?? 0.1;
+  const padAfter = opts.padAfter ?? opts.pad ?? 0.22;
   const asset = p.assets[clip.src];
   if (!asset || !asset.hasAudio) throw new Error(`El clip ${clip.id} no tiene audio`);
-  const src = await detectSilences(resolveSrc(dir, clip.src), { noise, minDuration, from: clip.in, to: clip.in + clip.duration });
-  const out = [];
-  for (const r of src) {
-    const s = Math.max(clip.in, r.start) + (r.start <= clip.in ? 0 : pad);
-    const e = Math.min(clip.in + clip.duration, r.end) - (r.end >= clip.in + clip.duration ? 0 : pad);
-    if (e - s < 0.1) continue;
-    out.push({ start: round3(clip.start + (s - clip.in)), end: round3(clip.start + (e - clip.in)) });
+  const file = resolveSrc(dir, clip.src);
+  const from = clip.in;
+  const to = clip.in + clip.duration;
+  const noise = opts.noise == null || opts.noise === 'auto' ? await autoNoiseThreshold(file, from, to) : Number(opts.noise);
+  const raw = await detectSilences(file, { noise, minDuration, from, to });
+  // rangos a quitar, en tiempo del archivo fuente
+  let ranges = [];
+  for (const r of raw) {
+    const s = Math.max(from, r.start) + (r.start <= from ? 0 : padAfter);
+    const e = Math.min(to, r.end) - (r.end >= to ? 0 : padBefore);
+    if (e - s >= 0.1) ranges.push({ start: s, end: e });
   }
-  return out;
+  ranges = mergeShortPieces(ranges, from, to, minClip);
+  return {
+    noise,
+    ranges: ranges.map((r) => ({ start: round3(clip.start + (r.start - from)), end: round3(clip.start + (r.end - from)) })),
+  };
+}
+
+// Si entre dos silencios queda un trozo hablado más corto que minClip, uno de esos silencios se
+// deja sin quitar (el más corto), para que el trozo se una a su vecino en vez de quedar suelto.
+export function mergeShortPieces(ranges, from, to, minClip) {
+  const r = [...ranges].sort((a, b) => a.start - b.start);
+  for (let changed = true; changed && r.length; ) {
+    changed = false;
+    for (let i = 0; i <= r.length; i++) {
+      const pieceStart = i === 0 ? from : r[i - 1].end;
+      const pieceEnd = i === r.length ? to : r[i].start;
+      const len = pieceEnd - pieceStart;
+      if (len <= 0 || len >= minClip) continue;
+      // vecinos: el silencio anterior (i-1) y el siguiente (i)
+      const before = i > 0 ? i - 1 : null;
+      const after = i < r.length ? i : null;
+      let victim = after ?? before;
+      if (before != null && after != null) victim = r[before].end - r[before].start <= r[after].end - r[after].start ? before : after;
+      r.splice(victim, 1);
+      changed = true;
+      break;
+    }
+  }
+  return r;
 }
 
 function round3(t) {

@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import type { Asset, Clip, Fit, Project, Range } from '../core/project.mjs';
 import { findClip, formatTime, kindOf } from '../core/project.mjs';
-import { fileName } from './api';
+import { fileName, type SilenceOptions } from './api';
 
 const KIND_ICON: Record<string, string> = { video: '🎬', audio: '🎵', image: '🖼', html: '✨' };
 const KIND_NAME: Record<string, string> = { video: 'Vídeo', audio: 'Audio', image: 'Imagen', html: 'Animación' };
@@ -54,7 +54,7 @@ interface InspectorProps {
   updateProject(patch: Partial<Project>): void;
   silences: { clipId: string; ranges: Range[] } | null;
   detecting: boolean;
-  detectSilences(clipId: string, opts: { noise: number; minDuration: number; pad: number }): void;
+  detectSilences(clipId: string, opts: SilenceOptions): void;
   applySilences(): void;
   discardSilences(): void;
 }
@@ -85,9 +85,11 @@ function ClipInspector(props: InspectorProps & { clip: Clip; trackName: string }
   const { clip, project } = props;
   const kind = kindOf(clip.src);
   const asset = project.assets[clip.src];
-  const [noise, setNoise] = useState(-35);
-  const [minDuration, setMinDuration] = useState(0.5);
-  const [pad, setPad] = useState(0.12);
+  const [noise, setNoise] = useState<'auto' | number>('auto');
+  const [minDuration, setMinDuration] = useState(0.6);
+  const [padBefore, setPadBefore] = useState(0.1);
+  const [padAfter, setPadAfter] = useState(0.22);
+  const [minClip, setMinClip] = useState(0.8);
   const sil = props.silences && props.silences.clipId === clip.id ? props.silences.ranges : null;
   const silTotal = sil ? sil.reduce((s, r) => s + r.end - r.start, 0) : 0;
   const num = (v: string) => Number(v.replace(',', '.'));
@@ -136,11 +138,13 @@ function ClipInspector(props: InspectorProps & { clip: Clip; trackName: string }
         <div className="silences-box">
           <div className="subtitle">Silencios</div>
           <div className="fields compact">
-            <Field label="Umbral (dB)" hint="Más alto (p. ej. -30) detecta más silencios" value={noise} onCommit={(v) => setNoise(num(v))} />
-            <Field label="Mínimo (s)" hint="Duración mínima de un silencio" value={minDuration} onCommit={(v) => setMinDuration(num(v))} />
-            <Field label="Margen (s)" hint="Se deja este margen a cada lado para no cortar palabras" value={pad} onCommit={(v) => setPad(num(v))} />
+            <Field label="Umbral (dB)" hint="auto = se calcula con el ruido de fondo del clip. Un número (p. ej. -30) lo fija a mano" value={noise} text onCommit={(v) => setNoise(v.trim() === '' || v.trim() === 'auto' ? 'auto' : num(v))} />
+            <Field label="Pausa mínima (s)" hint="Solo se quitan silencios más largos que esto: las pausas naturales se quedan" value={minDuration} onCommit={(v) => setMinDuration(num(v))} />
+            <Field label="Margen antes (s)" hint="Margen antes de empezar a hablar" value={padBefore} onCommit={(v) => setPadBefore(num(v))} />
+            <Field label="Margen después (s)" hint="Margen al terminar de hablar, para no comerse finales ni respiraciones" value={padAfter} onCommit={(v) => setPadAfter(num(v))} />
+            <Field label="Clip mínimo (s)" hint="Nunca deja trozos más cortos que esto: si quedaría uno, no corta ese silencio" value={minClip} onCommit={(v) => setMinClip(num(v))} />
           </div>
-          <button className="primary wide" disabled={props.detecting} onClick={() => props.detectSilences(clip.id, { noise, minDuration, pad })}>
+          <button className="primary wide" disabled={props.detecting} onClick={() => props.detectSilences(clip.id, { noise, minDuration, padBefore, padAfter, minClip })}>
             {props.detecting ? 'Analizando…' : 'Detectar silencios'}
           </button>
           {sil && (

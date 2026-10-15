@@ -26,12 +26,17 @@ Comandos habituales (los tiempos son segundos del timeline; también vale `1:02.
 {{EDITOR}} set c2 volume=0.3 fit=cover
 {{EDITOR}} set c5 zoom=1.2 zoomX=0.5 zoomY=0.35      # acercamiento del 20 % hacia la cara
 {{EDITOR}} delete c4 --ripple                        # borra y cierra el hueco
-{{EDITOR}} silences c1                               # lista los silencios
-{{EDITOR}} silences c1 --apply                       # los quita (jump cuts)
+{{EDITOR}} silences c1                               # lista los silencios (umbral automático)
+{{EDITOR}} silences c1 --apply                       # los quita (jump cuts) con márgenes buenos
 {{EDITOR}} sheet c1 --every 2                        # hojas de miniaturas para revisar el vídeo
 {{EDITOR}} frame 12.5 --out .editor/f.png            # fotograma compuesto
-{{EDITOR}} export                                    # MP4 final en export/
+{{EDITOR}} review                                    # 360p + audio WAV 16 kHz del montaje, muy ligero
+{{EDITOR}} export --draft                            # borrador rápido a 480p para revisar entero
+{{EDITOR}} export                                    # MP4 final en export/ (-14 LUFS)
 ```
+
+**No pidas ni copies los vídeos originales**: pesan cientos de MB. Para revisar usa `review`, que deja en
+`.editor/review/` un vídeo de 360p (pocos MB) y el audio en WAV mono de 16 kHz, listo para transcribir.
 
 **Para ver el vídeo**: `sheet` genera imágenes con 30 miniaturas cada una y el segundo del timeline
 marcado en cada miniatura. Léelas con tu herramienta de leer imágenes. `frame` sirve para comprobar
@@ -109,12 +114,24 @@ mirando el PNG.
 
 ## Recetas
 
+### Quitar silencios sin que suene acelerado
+
+`silences --apply` ya aplica unas reglas seguras; no las bajes sin motivo:
+- umbral calculado con el ruido de fondo de cada clip (`--noise auto`);
+- solo quita pausas de más de 0,6 s (`--min`): las pausas naturales se quedan;
+- deja 0,1 s antes de hablar y 0,22 s después (`--pad-before`, `--pad-after`) para no comerse finales;
+- nunca deja trozos de menos de 0,8 s (`--min-clip`): un vídeo con cientos de clips diminutos se ve mal;
+- al exportar, cada corte lleva un fundido de audio de 15 ms, así que no hay chasquidos.
+
+Nunca cortes a mitad de frase: corta solo en silencios. Después, revisa con `export --draft` o `review`.
+
 ### Acercamientos (zoom) en los cortes
 
-En vídeos hablados, alterna el zoom entre clips consecutivos para que cada corte se note menos y el
-vídeo tenga ritmo. Por ejemplo: `1`, `1.15`, `1`, `1.2`… Centra el zoom en la cara: mira un
-fotograma, estima dónde está la cara (de 0 a 1 en horizontal y vertical) y úsalo como `zoomX`/`zoomY`.
-Para remarcar una frase importante, usa un zoom mayor (1.3) en ese clip.
+Pon zoom **solo cuando cambia la frase o la idea**, no en cada corte: si alternas en cada microcorte el
+vídeo se ve nervioso. Un buen ritmo es un cambio de zoom cada 5–15 s, por ejemplo `1` → `1.15` → `1`.
+Para que el zoom no cambie en un corte, pon el mismo valor en los clips de esa idea. Centra el zoom en la
+cara: mira un fotograma, estima dónde está (de 0 a 1 en horizontal y vertical) y úsalo como
+`zoomX`/`zoomY`. Para remarcar una frase importante, usa un zoom mayor (1.3) en ese clip.
 
 ### Animación a pantalla completa cuando la persona no mira a cámara
 

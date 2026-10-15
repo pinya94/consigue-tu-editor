@@ -37,16 +37,25 @@ Pistas
   track set <id> clave=valor ...    name, muted=true, hidden=true
 
 Silencios
-  silences <clip> [--noise -35] [--min 0.5] [--pad 0.12]   Solo los lista
-  silences <clip> ... --apply                              Los quita y cierra huecos
+  silences <clip> [--noise auto|-35] [--min 0.6] [--pad-before 0.1] [--pad-after 0.22] [--min-clip 0.8]
+                                    Lista los silencios que conviene quitar. Por defecto el umbral
+                                    se calcula con el ruido de fondo del clip y no deja trozos de
+                                    menos de 0,8 s. Al exportar se añade un fundido corto en cada corte.
+  silences <clip> ... --apply       Los quita y cierra huecos
 
 Ver el vídeo
   sheet <clip> [--every 2] [--from t] [--to t]
                                     Hojas de miniaturas con el segundo del timeline en cada una
   frame <tiempo> [--out archivo.png]  Fotograma compuesto (para ver cómo queda)
 
+Revisar sin gastar
+  review                            Vídeo de 360p muy ligero + audio WAV mono de 16 kHz en .editor/review/
+                                    (para ver si se mira a cámara o transcribir el montaje)
+  proxy                             Crea las copias ligeras que usa la preview (la app las crea sola)
+
 Salida
-  export [--out archivo.mp4]          Exporta el vídeo final
+  export [--out archivo.mp4]          Exporta el vídeo final (1080p, volumen normalizado a -14 LUFS)
+  export --draft                      Borrador rápido de 480p para revisar el montaje entero
 `;
 
 // ---------- argumentos ----------
@@ -265,9 +274,11 @@ async function main() {
       const p = (await syncAssets(dir, loadProject(dir))).project;
       const f = P.findClip(p, pos[0]);
       if (!f) fail(`No existe el clip ${pos[0]}`);
-      const ranges = await clipSilences(dir, p, f.clip, { noise: num(flags.noise) ?? -35, minDuration: num(flags.min) ?? 0.5, pad: num(flags.pad) ?? 0.12 });
+      const opts = { noise: flags.noise === undefined || flags.noise === 'auto' ? 'auto' : num(flags.noise), minDuration: num(flags.min), minClip: num(flags['min-clip']), padBefore: num(flags['pad-before']), padAfter: num(flags['pad-after']) };
+      for (const k of Object.keys(opts)) if (opts[k] === undefined) delete opts[k];
+      const { noise, ranges } = await clipSilences(dir, p, f.clip, opts);
       const total = ranges.reduce((s, r) => s + r.end - r.start, 0);
-      console.log(`${ranges.length} silencios en ${f.clip.id} (${s3(total)}s en total, en tiempo del timeline):`);
+      console.log(`${ranges.length} silencios en ${f.clip.id} (umbral ${noise} dB; ${s3(total)}s en total, en tiempo del timeline):`);
       for (const r of ranges) console.log(`  ${s3(r.start)} → ${s3(r.end)}  (${s3(r.end - r.start)}s)`);
       if (flags.apply && ranges.length) {
         saveProject(dir, P.removeRanges(p, f.clip.id, ranges));
@@ -311,8 +322,14 @@ async function main() {
       const dir = projectDir();
       const args = ['export', '--project', dir];
       if (flags.out && flags.out !== true) args.push('--out', path.resolve(flags.out));
+      if (flags.draft) args.push('--draft');
+      if (flags.review) args.push('--review');
       process.exit(await runElectron(args));
     }
+
+    case 'review':
+    case 'proxy':
+      process.exit(await runElectron([cmd, '--project', projectDir()]));
 
     default:
       fail(`Comando desconocido "${cmd}". Usa el comando help.`);

@@ -23,27 +23,21 @@ interface LayerInfo {
 }
 
 // Para cada pista: el clip activo y, si cabe, el siguiente (oculto y precargado).
+// Cada clip tiene su propio reproductor: el siguiente ya está colocado en su punto de entrada
+// antes de llegar al corte, así que el cambio no espera a que el vídeo salte.
 function layersAt(p: Project, t: number): LayerInfo[] {
   const out: LayerInfo[] = [];
   for (const track of p.tracks) {
     if (track.kind === 'video' && track.hidden) continue;
-    const keys = new Set<string>();
     const cur = track.clips.find((c) => t >= c.start && t < clipEnd(c));
-    if (cur) {
-      const key = `${track.id}:${cur.src}`;
-      keys.add(key);
-      out.push({ key, track, clip: cur, local: cur.in + (t - cur.start), visible: true });
-    }
+    if (cur) out.push({ key: cur.id, track, clip: cur, local: cur.in + (t - cur.start), visible: true });
     const next = track.clips.find((c) => c.start > t && c.start - t < PRELOAD_AHEAD);
-    if (next) {
-      const key = `${track.id}:${next.src}`;
-      if (!keys.has(key)) out.push({ key, track, clip: next, local: next.in, visible: false });
-    }
+    if (next) out.push({ key: next.id, track, clip: next, local: next.in, visible: false });
   }
   return out;
 }
 
-export function Preview({ project, dir, base }: { project: Project; dir: string; base: string }) {
+export function Preview({ project, dir, base, proxies }: { project: Project; dir: string; base: string; proxies: Record<string, string> }) {
   const time = useTime();
   const playing = usePlaying();
   const boxRef = useRef<HTMLDivElement>(null);
@@ -66,7 +60,8 @@ export function Preview({ project, dir, base }: { project: Project; dir: string;
         {layers.map((l) => {
           const kind = kindOf(l.clip.src);
           const asset = project.assets[l.clip.src];
-          const url = mediaUrl(base, dir, l.clip.src, kind === 'html' ? asset?.mtime : undefined);
+          // la preview usa la copia ligera si existe; la exportación siempre usa el original
+          const url = mediaUrl(base, dir, (kind === 'video' && proxies[l.clip.src]) || l.clip.src, kind === 'html' ? asset?.mtime : undefined);
           const style = { visibility: l.visible ? 'visible' : 'hidden', objectFit: objectFit(l.clip.fit), ...zoomStyle(l.clip) } as const;
           const volume = Math.max(0, Math.min(1, l.clip.volume ?? 1));
           if (kind === 'video' || kind === 'audio')

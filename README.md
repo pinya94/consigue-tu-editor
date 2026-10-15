@@ -43,11 +43,16 @@ FFmpeg viene incluido; no hace falta instalar nada más. Para trabajar con Claud
 | Fotograma a fotograma / de segundo en segundo | `←` `→` / `Mayús+←` `Mayús+→` |
 | Deshacer / rehacer | `Ctrl+Z` / `Ctrl+Y` |
 | Zoom del timeline | `Ctrl+rueda`, `+` `−` o el deslizador |
-| Exportar | `Ctrl+E` o el botón **Exportar** |
+| Exportar | `Ctrl+E` o el botón **Exportar** (1080p, volumen normalizado para YouTube) |
+| Revisar rápido | Botón **Borrador rápido**: 480p en poco tiempo para ver el montaje entero |
 
 4. Al seleccionar un clip, en el panel derecho puedes cambiar el volumen, el **zoom** y su punto de
    enfoque, y **detectar silencios**. Los silencios se marcan en rojo en el timeline y se quitan
-   con un clic.
+   con un clic. El umbral se calcula solo con el ruido de fondo, se respetan las pausas naturales y
+   cada corte lleva un fundido de audio para que no suene brusco.
+5. La preview usa **copias ligeras** de tus vídeos (540p), que el editor crea solo en segundo plano. Así
+   va fluida aunque el original sea un 1080p de OBS de cientos de MB. Al exportar siempre se usa el
+   original. Con el botón *Preview ligera / original* puedes cambiar entre las dos.
 
 ---
 
@@ -138,7 +143,8 @@ Claude usa la CLI, pero tú también puedes usarla. Con la app instalada:
 | `silences <clip> [--apply]` | Detectar (y quitar) silencios |
 | `sheet <clip> [--every 2]` | Hojas de miniaturas para revisar el vídeo |
 | `frame <t>` | Fotograma final compuesto en PNG |
-| `export` | Exportar a MP4 |
+| `review` | Vídeo de 360p y audio WAV muy ligeros, para revisar o transcribir el montaje |
+| `export [--draft]` | Exportar a MP4 (o un borrador rápido de 480p) |
 
 Todo queda en `proyecto.json`, un JSON legible. Así cualquiera, persona o IA, puede leerlo y
 editarlo.

@@ -8,7 +8,8 @@ import { fileURLToPath } from 'node:url';
 import { startMediaServer } from './server.mjs';
 import { makeHtmlRenderer } from './htmlRender.mjs';
 import { APP_NAME, loadProject, saveProject, initProject, syncAssets, toSrc, probe, clipSilences, projectFile, findProjectDir, serialize, writeProjectGuide } from '../core/media.mjs';
-import { exportProject, exportFrame } from '../core/export.mjs';
+import { exportProject, exportFrame, PRESETS } from '../core/export.mjs';
+import { readProxies, pendingProxies, makeProxy } from '../core/proxy.mjs';
 import { findClip, kindOf, parseTime, PROJECT_FILE } from '../core/project.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -64,6 +65,7 @@ async function openProject(dir) {
   } catch {}
   watch(dir);
   rememberProject(dir);
+  queueProxies();
   win?.setTitle(`${p.name} — ${APP_NAME}`);
   return { dir, project: p };
 }
@@ -101,12 +103,41 @@ function watch(dir) {
         if (synced.changed) write(p);
         else c.lastWritten = text;
         send('project:external', p);
+        queueProxies();
       } catch (e) {
         // JSON a medio escribir o con errores: se avisa y se espera al siguiente cambio
         send('app:error', `No se pudo leer ${PROJECT_FILE}: ${e.message}`);
       }
     }, 200);
   });
+}
+
+// ---------- Copias ligeras para la preview ----------
+
+let proxyJob = null;
+
+// Crea, de una en una y en segundo plano, las copias ligeras que falten.
+function queueProxies() {
+  if (proxyJob || !current) return;
+  const dir = current.dir;
+  proxyJob = (async () => {
+    try {
+      for (;;) {
+        if (!current || current.dir !== dir) break;
+        const p = loadProject(dir);
+        const src = pendingProxies(dir, p)[0];
+        if (!src) break;
+        send('proxy:progress', { src, value: 0 });
+        await makeProxy(dir, p, src, { onProgress: (value) => send('proxy:progress', { src, value }) });
+        send('proxy:ready', readProxies(dir, p));
+      }
+    } catch (e) {
+      send('app:error', e.message);
+    } finally {
+      proxyJob = null;
+      send('proxy:progress', null);
+    }
+  })();
 }
 
 // ---------- Ventana ----------
@@ -136,7 +167,8 @@ function createWindow() {
     win.webContents.once('did-finish-load', async () => {
       await new Promise((r) => setTimeout(r, 2500));
       if (process.env.EDITOR_SNAPSHOT_JS) {
-        await win.webContents.executeJavaScript(process.env.EDITOR_SNAPSHOT_JS).catch((e) => console.error(e));
+        const result = await win.webContents.executeJavaScript(process.env.EDITOR_SNAPSHOT_JS).catch((e) => console.error(e));
+        if (result !== undefined) console.log(typeof result === 'string' ? result : JSON.stringify(result));
         await new Promise((r) => setTimeout(r, 1500));
       }
       const img = await win.webContents.capturePage();
@@ -210,21 +242,29 @@ function registerIpc() {
     return clipSilences(current.dir, project, f.clip, opts);
   });
 
-  ipcMain.handle('export:run', async (_e, project) => {
-    const r = await dialog.showSaveDialog(win, {
-      title: 'Exportar vídeo',
-      defaultPath: path.join(current.dir, 'export', `${project.name}.mp4`),
-      filters: [{ name: 'Vídeo MP4', extensions: ['mp4'] }],
-    });
-    if (r.canceled) return null;
+  ipcMain.handle('proxy:list', (_e, project) => (current ? readProxies(current.dir, project) : {}));
+
+  // preset 'final' pregunta dónde guardar; 'draft' (borrador rápido) se guarda directamente en export/
+  ipcMain.handle('export:run', async (_e, { project, preset = 'final' }) => {
+    let out = path.join(current.dir, 'export', `${project.name}${preset === 'final' ? '' : '-borrador'}.mp4`);
+    if (preset === 'final') {
+      const r = await dialog.showSaveDialog(win, { title: 'Exportar vídeo', defaultPath: out, filters: [{ name: 'Vídeo MP4', extensions: ['mp4'] }] });
+      if (r.canceled) return null;
+      out = r.filePath;
+    }
     exportAbort = new AbortController();
-    const { renderHtml } = makeHtmlRenderer({ dir: current.dir, project, urlFor: media.urlFor });
+    const logFile = path.join(current.dir, '.editor', 'export.log');
+    const { renderHtml, cleanCache } = makeHtmlRenderer({ dir: current.dir, project, urlFor: media.urlFor });
     try {
-      await exportProject({ dir: current.dir, project, out: r.filePath, renderHtml, signal: exportAbort.signal, onProgress: (pr) => send('export:progress', pr) });
+      await exportProject({ dir: current.dir, project, out, preset, logFile, renderHtml, signal: exportAbort.signal, onProgress: (pr) => send('export:progress', pr) });
+      cleanCache();
+    } catch (e) {
+      const err = new Error(`${e.message}||${logFile}`);
+      throw err;
     } finally {
       exportAbort = null;
     }
-    return r.filePath;
+    return out;
   });
   ipcMain.handle('export:cancel', () => exportAbort?.abort());
 
@@ -243,7 +283,7 @@ function arg(name) {
 async function runCli() {
   const args = process.argv.slice(process.argv.indexOf('--cli') + 1);
   const cmd = args[0];
-  if (cmd !== 'export' && cmd !== 'frame') {
+  if (cmd !== 'export' && cmd !== 'frame' && cmd !== 'review' && cmd !== 'proxy') {
     const { run } = await import('../cli/editor.mjs');
     await run(args);
     return;
@@ -252,19 +292,43 @@ async function runCli() {
   if (!dir) throw new Error('No hay proyecto.json aquí. Usa --project <carpeta>.');
   let p = loadProject(dir);
   p = (await syncAssets(dir, p)).project;
-  const { renderHtml, renderHtmlFrame } = makeHtmlRenderer({ dir, project: p, urlFor: media.urlFor });
+  const { renderHtml, renderHtmlFrame, cleanCache } = makeHtmlRenderer({ dir, project: p, urlFor: media.urlFor });
+  let last = '';
+  const onProgress = (pr) => {
+    const line = `${pr.label}: ${Math.round(pr.value * 100)}%`;
+    if (line !== last && Math.round(pr.value * 100) % 10 === 0) console.log(line);
+    last = line;
+  };
+  const logFile = path.join(dir, '.editor', 'export.log');
+  const fail = (e) => {
+    throw new Error(`${e.message}\nRegistro completo: ${logFile}`);
+  };
   if (cmd === 'export') {
-    const out = path.resolve(arg('out') || path.join(dir, 'export', `${p.name}.mp4`));
-    let last = '';
-    await exportProject({
-      dir, project: p, out, renderHtml,
-      onProgress: (pr) => {
-        const line = `${pr.label}: ${Math.round(pr.value * 100)}%`;
-        if (line !== last && Math.round(pr.value * 100) % 10 === 0) console.log(line);
-        last = line;
-      },
-    });
-    console.log(`Exportado: ${out}`);
+    const preset = process.argv.includes('--draft') ? 'draft' : process.argv.includes('--review') ? 'review' : 'final';
+    const out = path.resolve(arg('out') || path.join(dir, 'export', `${p.name}${preset === 'final' ? '' : '-' + preset}.mp4`));
+    await exportProject({ dir, project: p, out, preset, logFile, renderHtml, onProgress }).catch(fail);
+    cleanCache();
+    console.log(`Exportado (${PRESETS[preset].label}): ${out} (${(fs.statSync(out).size / 1e6).toFixed(1)} MB)`);
+  } else if (cmd === 'review') {
+    // versión mínima para revisar el montaje: vídeo de 360p y el audio en WAV mono de 16 kHz
+    const out = path.join(dir, '.editor', 'review', 'review.mp4');
+    const audioOut = path.join(dir, '.editor', 'review', 'review.wav');
+    await exportProject({ dir, project: p, out, preset: 'review', audioOut, logFile, renderHtml, onProgress }).catch(fail);
+    console.log(`Vídeo de revisión: ${out} (${(fs.statSync(out).size / 1e6).toFixed(1)} MB)`);
+    console.log(`Audio (16 kHz mono): ${audioOut} (${(fs.statSync(audioOut).size / 1e6).toFixed(1)} MB)`);
+  } else if (cmd === 'proxy') {
+    const pending = pendingProxies(dir, p);
+    if (!pending.length) console.log('Todas las copias ligeras están listas.');
+    for (const src of pending) {
+      let shown = -1;
+      await makeProxy(dir, p, src, {
+        onProgress: (v) => {
+          const pc = Math.floor(v * 10) * 10;
+          if (pc !== shown) console.log(`${src}: ${(shown = pc)}%`);
+        },
+      });
+      console.log(`Copia ligera lista: ${src}`);
+    }
   } else if (cmd === 'frame') {
     const out = path.resolve(arg('out') || path.join(dir, '.editor', 'frame.png'));
     await exportFrame({ dir, project: p, t: parseTime(arg('time') || args[1] || '0'), out, renderHtmlFrame });
@@ -281,7 +345,17 @@ async function runCli() {
 if (cliMode || process.env.EDITOR_SNAPSHOT) app.setPath('userData', path.join(os.tmpdir(), 'editor-aux'));
 if (cliMode) app.disableHardwareAcceleration();
 
+// Una sola ventana: si ya está abierta, la segunda vez solo se trae al frente.
+const gotLock = cliMode || process.env.EDITOR_SNAPSHOT ? true : app.requestSingleInstanceLock();
+if (!gotLock) app.quit();
+app.on('second-instance', () => {
+  if (!win) return;
+  if (win.isMinimized()) win.restore();
+  win.focus();
+});
+
 app.whenReady().then(async () => {
+  if (!gotLock) return;
   media = await startMediaServer();
   if (cliMode) {
     try {

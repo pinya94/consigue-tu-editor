@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { Clip, Project, Range, Track } from '../core/project.mjs';
 import * as P from '../core/project.mjs';
-import { api, type ExportProgress } from './api';
+import { api, type ExportProgress, type SilenceOptions } from './api';
 import { clock, usePlaying, useTime } from './clock';
 import { useHistory } from './history';
 import { Preview } from './Preview';
@@ -16,6 +16,10 @@ export function Editor({ dir, initial, base, onClose }: { dir: string; initial: 
   const [silences, setSilences] = useState<{ clipId: string; ranges: Range[] } | null>(null);
   const [detecting, setDetecting] = useState(false);
   const [exporting, setExporting] = useState<ExportProgress | null>(null);
+  const [exportError, setExportError] = useState<{ message: string; log: string } | null>(null);
+  const [proxies, setProxies] = useState<Record<string, string>>({});
+  const [proxyProgress, setProxyProgress] = useState<{ src: string; value: number } | null>(null);
+  const [useProxies, setUseProxies] = useState(true);
   const [toast, setToast] = useState<string | null>(null);
   const timelineBox = useRef<HTMLDivElement>(null);
 
@@ -55,8 +59,13 @@ export function Editor({ dir, initial, base, onClose }: { dir: string; initial: 
       setSelection((sel) => sel.filter((id) => P.findClip(p, id)));
     });
     const offErr = api.onError(notify);
-    const offProg = api.onExportProgress(setExporting);
+    const offProg = api.onExportProgress((pr) => setExporting((cur) => (cur ? pr : cur)));
+    const offProxyProg = api.onProxyProgress(setProxyProgress);
+    const offProxyReady = api.onProxyReady(setProxies);
+    api.proxies(h.current()).then(setProxies);
     return () => {
+      offProxyProg();
+      offProxyReady();
       offExt();
       offErr();
       offProg();
@@ -175,11 +184,12 @@ export function Editor({ dir, initial, base, onClose }: { dir: string; initial: 
   );
 
   const detectSilences = useCallback(
-    async (clipId: string, opts: { noise: number; minDuration: number; pad: number }) => {
+    async (clipId: string, opts: SilenceOptions) => {
       setDetecting(true);
       try {
-        const ranges = await api.detectSilences({ project: h.current(), clipId, opts });
+        const { ranges, noise } = await api.detectSilences({ project: h.current(), clipId, opts });
         setSilences({ clipId, ranges });
+        if (opts.noise === 'auto') notify(`Umbral calculado con el ruido de fondo: ${noise} dB`);
       } catch (e: any) {
         notify(e.message);
       } finally {
@@ -198,22 +208,29 @@ export function Editor({ dir, initial, base, onClose }: { dir: string; initial: 
     setSelection([]);
   }, [apply, silences, notify]);
 
-  const doExport = useCallback(async () => {
-    if (exporting) return;
-    clock.setPlaying(false);
-    setExporting({ phase: 'inicio', label: 'Preparando…', value: 0 });
-    try {
-      const out = await api.exportVideo(h.current());
-      if (out) {
-        notify('Vídeo exportado');
-        api.reveal(out);
+  const doExport = useCallback(
+    async (preset: 'final' | 'draft' = 'final') => {
+      if (exporting) return;
+      clock.setPlaying(false);
+      setExportError(null);
+      setExporting({ phase: 'inicio', label: 'Preparando…', value: 0 });
+      try {
+        const out = await api.exportVideo(h.current(), preset);
+        if (out) {
+          notify(preset === 'draft' ? 'Borrador exportado' : 'Vídeo exportado');
+          api.reveal(out);
+        }
+      } catch (e: any) {
+        // el proceso principal manda "mensaje||ruta del registro"; el error se queda a la vista
+        const raw = String(e.message).replace(/^Error invoking remote method '[^']+': (Error: )?/, '');
+        const [message, log] = raw.split('||');
+        setExportError({ message, log: log || '' });
+      } finally {
+        setExporting(null);
       }
-    } catch (e: any) {
-      notify(e.message.split('\n')[0]);
-    } finally {
-      setExporting(null);
-    }
-  }, [exporting, h.current, notify]);
+    },
+    [exporting, h.current, notify],
+  );
 
   // ---------- teclado ----------
   useEffect(() => {
@@ -225,7 +242,7 @@ export function Editor({ dir, initial, base, onClose }: { dir: string; initial: 
       const k = e.key.toLowerCase();
       if (e.ctrlKey && k === 'z' && !e.shiftKey) h.undo();
       else if (e.ctrlKey && (k === 'y' || (k === 'z' && e.shiftKey))) h.redo();
-      else if (e.ctrlKey && k === 'e') doExport();
+      else if (e.ctrlKey && k === 'e') doExport('final');
       else if (e.ctrlKey && k === 'i') importFiles();
       else if (e.ctrlKey && k === 'a') setSelection(P.allClips(p).map((c) => c.id));
       else if (e.ctrlKey && k === 'b') split();
@@ -267,7 +284,10 @@ export function Editor({ dir, initial, base, onClose }: { dir: string; initial: 
           ↷
         </button>
         <button onClick={() => importFiles()}>Importar</button>
-        <button className="primary" onClick={doExport} disabled={!!exporting}>
+        <button onClick={() => doExport('draft')} disabled={!!exporting} title="Exporta rápido a 480p para revisar el montaje entero">
+          Borrador rápido
+        </button>
+        <button className="primary" onClick={() => doExport('final')} disabled={!!exporting}>
           Exportar
         </button>
       </header>
@@ -275,8 +295,17 @@ export function Editor({ dir, initial, base, onClose }: { dir: string; initial: 
       <div className="main-area">
         <MediaBin project={project} onImport={() => importFiles()} onAdd={(src) => addAt([src], clock.time, null)} />
         <div className="center">
-          <Preview project={project} dir={dir} base={base} />
-          <Transport project={project} onToggle={togglePlay} />
+          <Preview project={project} dir={dir} base={base} proxies={useProxies ? proxies : {}} />
+          <Transport project={project} onToggle={togglePlay}>
+            <button
+              className={`ghost quality ${useProxies ? 'on' : ''}`}
+              onClick={() => setUseProxies((v) => !v)}
+              title={useProxies ? 'La preview usa copias ligeras (fluida). Clic para ver el original.' : 'La preview usa el original. Clic para usar copias ligeras.'}
+            >
+              {useProxies ? 'Preview ligera' : 'Preview original'}
+            </button>
+            {proxyProgress && <span className="muted proxy-status">Preparando copia ligera {Math.round(proxyProgress.value * 100)} %</span>}
+          </Transport>
         </div>
         <Inspector
           project={project}
@@ -335,12 +364,27 @@ export function Editor({ dir, initial, base, onClose }: { dir: string; initial: 
           </div>
         </div>
       )}
+      {exportError && (
+        <div className="modal-back">
+          <div className="modal">
+            <div className="subtitle error">La exportación ha fallado</div>
+            <p className="error-text">{exportError.message}</p>
+            {exportError.log && <p className="muted small">Registro completo: {exportError.log}</p>}
+            <div className="modal-buttons">
+              {exportError.log && <button onClick={() => api.reveal(exportError.log)}>Ver registro</button>}
+              <button className="primary" onClick={() => setExportError(null)}>
+                Cerrar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       {toast && <div className="toast">{toast}</div>}
     </div>
   );
 }
 
-function Transport({ project, onToggle }: { project: Project; onToggle(): void }) {
+function Transport({ project, onToggle, children }: { project: Project; onToggle(): void; children?: React.ReactNode }) {
   const t = useTime();
   const playing = usePlaying();
   return (
@@ -354,6 +398,7 @@ function Transport({ project, onToggle }: { project: Project; onToggle(): void }
       <span className="timecode">
         {P.formatTime(t, project.fps)} <span className="muted">/ {P.formatTime(P.totalDuration(project), project.fps)}</span>
       </span>
+      {children}
     </div>
   );
 }

@@ -611,3 +611,35 @@ kbd {
   z-index: 60;
   max-width: 70%;
 }
+
+.transport .quality {
+  font-size: 11px;
+  padding: 3px 8px;
+  margin-left: 6px;
+  border-color: var(--line);
+}
+.transport .quality.on {
+  color: var(--accent);
+}
+.proxy-status {
+  font-size: 11px;
+}
+.subtitle.error,
+.error-text {
+  color: var(--danger);
+}
+.error-text {
+  user-select: text;
+  word-break: break-word;
+}
+.small {
+  font-size: 11px;
+  word-break: break-all;
+  user-select: text;
+}
+.modal-buttons {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+  margin-top: 12px;
+}
