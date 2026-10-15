@@ -105,10 +105,13 @@ export async function installWhisper({ dir, model = 'medium', gpu = true, onLog 
   let bin = path.join(binDir, 'Release', 'whisper-cli.exe');
   if (!fs.existsSync(bin)) {
     const zip = path.join(dir, build.file);
-    onLog(`Descargando whisper.cpp (${build.mb} MB)…`);
-    await download(`https://github.com/ggml-org/whisper.cpp/releases/download/${WHISPER_RELEASE}/${build.file}`, zip, onLog);
+    if (!fs.existsSync(zip)) {
+      onLog(`Descargando whisper.cpp (${build.mb} MB)…`);
+      await download(`https://github.com/ggml-org/whisper.cpp/releases/download/${WHISPER_RELEASE}/${build.file}`, zip, onLog);
+    }
     fs.mkdirSync(binDir, { recursive: true });
-    await run('tar', ['-xf', zip, '-C', binDir]); // tar de Windows 10+ abre .zip
+    onLog('Descomprimiendo…');
+    await unzip(zip, binDir);
     fs.rmSync(zip);
     if (!fs.existsSync(bin)) bin = findFile(binDir, 'whisper-cli.exe') || bin;
   }
@@ -119,6 +122,15 @@ export async function installWhisper({ dir, model = 'medium', gpu = true, onLog 
   }
   saveWhisperConfig({ ...readWhisperConfig(), bin, model: modelFile, gpu });
   return { bin, model: modelFile };
+}
+
+// El tar de Windows (bsdtar) abre .zip. Se llama por su ruta: el de Git (GNU tar) puede ir antes en
+// el PATH y no sabe abrir zips ni rutas con "F:". Si no está, PowerShell.
+async function unzip(zip, dest) {
+  const winTar = path.join(process.env.SystemRoot || 'C:\\Windows', 'System32', 'tar.exe');
+  if (process.platform === 'win32' && fs.existsSync(winTar)) return run(winTar, ['-xmf', zip, '-C', dest]); // -m: sin restaurar fechas (falla en discos FAT)
+  if (process.platform === 'win32') return run('powershell.exe', ['-NoProfile', '-Command', `Expand-Archive -LiteralPath '${zip.replaceAll("'", "''")}' -DestinationPath '${dest.replaceAll("'", "''")}' -Force`]);
+  return run('unzip', ['-o', '-q', zip, '-d', dest]);
 }
 
 function findFile(dir, name) {
