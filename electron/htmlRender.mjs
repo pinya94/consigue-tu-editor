@@ -55,9 +55,11 @@ function paintOnce(win) {
 
 // Cada captura marca la página con un "testigo": un píxel de color único en la esquina. Se repinta
 // hasta que la captura trae ese color, así nunca se guarda un fotograma atrasado o vacío.
-let token = 0;
+// Cada ventana lleva su propio contador (se renderizan varias animaciones a la vez).
+const tokens = new WeakMap();
 async function captureAt(win, t, width, height) {
-  token = (token % 250) + 1;
+  const token = ((tokens.get(win) || 0) % 250) + 1;
+  tokens.set(win, token);
   await win.webContents.executeJavaScript(`(function(){
     window.__seekAnimation && window.__seekAnimation(${t});
     var m = document.getElementById('__testigo');
