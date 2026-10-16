@@ -7,9 +7,12 @@ import { spawn } from 'node:child_process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { createRequire } from 'node:module';
 import * as P from '../core/project.mjs';
-import { findProjectDir, loadProject, saveProject, initProject, syncAssets, toSrc, clipSilences, resolveSrc, contactSheet, writeProjectGuide } from '../core/media.mjs';
+import { findProjectDir, loadProject, saveProject, initProject, syncAssets, toSrc, clipSilences, resolveSrc, contactSheet, writeProjectGuide, copyAnimationKit, run as runBin, ffmpegPath } from '../core/media.mjs';
 import * as W from '../core/whisper.mjs';
 import * as T from '../core/transcript.mjs';
+import * as PZ from '../core/pauses.mjs';
+import * as A from '../core/animate.mjs';
+import * as M from '../core/music.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const appRoot = path.resolve(here, '..');
@@ -41,6 +44,9 @@ Pistas
   music <archivo> [--volume 0.5] [--duck 0.25]
                                     Música de fondo en una pista nueva, de principio a fin del vídeo,
                                     que baja sola cuando se habla (ducking)
+  music --generate [--volume 0.45] [--duck 0.25] [--seed 7]
+                                    Compone una música original (lo-fi suave a 84 BPM) que dura lo
+                                    que el vídeo, la guarda en media/musica-generada.mp3 y la añade igual
 
 Silencios
   silences <clip> [--noise auto|-35] [--min 0.6] [--pad-before 0.1] [--pad-after 0.22] [--min-clip 0.8]
@@ -48,6 +54,11 @@ Silencios
                                     se calcula con el ruido de fondo del clip y no deja trozos de
                                     menos de 0,8 s. Al exportar se añade un fundido corto en cada corte.
   silences <clip> ... --apply       Los quita y cierra huecos
+  pauses [--apply] [--threshold -33] [--min 0.6] [--min-edge 0.4] [--keep-after 0.14] [--keep-before 0.08]
+                                    Pausas muertas de todo el montaje (ventanas de 50 ms por debajo
+                                    de -33 dB): de 0,6 s o más dentro de un clip y de 0,4 s o más junto
+                                    a un corte (también clips enteros sin voz). Deja 0,14 s después de
+                                    hablar y 0,08 s antes. Con --apply las quita en todas las pistas.
 
 Transcripción (whisper.cpp, en español)
   transcribe [--prompt "Claude, CapCut"] [--force]
@@ -70,6 +81,12 @@ Transcripción (whisper.cpp, en español)
   whisper install --dir <carpeta> [--model medium|small] [--cpu]
                                     Descarga whisper.cpp y el modelo (cientos de MB: pregunta antes)
   whisper set [--bin whisper-cli.exe] [--model ggml-….bin]
+
+Animaciones
+  animate [--dry] [--guion media/kit/guion.mjs]
+                                    Genera las animaciones del guion (ancladas a frases de la
+                                    transcripción, con el kit de media/kit/) en media/anim/ y rehace las
+                                    pistas Escenas (pantalla completa) y Rótulos. --dry: solo dónde caen
 
 Ver el vídeo
   sheet <clip> [--every 2] [--from t] [--to t]
@@ -172,13 +189,14 @@ function transcriptOrFail(dir, p) {
 }
 
 const ts = (t) => P.formatTime(t);
+const runFfmpeg = (args) => runBin(ffmpegPath, args);
 const cut = (s, n) => (s.length > n ? s.slice(0, n) + '…' : s);
 
 // Quita rangos del timeline (en todas las pistas) y guarda.
 function applyCuts(dir, p, ranges) {
   const merged = T.mergeRanges(ranges);
   const before = P.totalDuration(p);
-  const next = P.removeTimeRanges(p, merged);
+  const next = P.dropSlivers(P.removeTimeRanges(p, merged));
   saveProject(dir, next);
   refreshTranscript(dir, next);
   for (const w of P.validate(next)) console.log('Aviso: ' + w);
@@ -380,6 +398,84 @@ async function main() {
       return;
     }
 
+    case 'pauses': {
+      const { dir, p } = await loadSynced();
+      const audio = {};
+      for (const src of W.voiceSources(p)) audio[src] = W.readWavSamples(await W.sourceWav16(dir, p, src));
+      if (!Object.keys(audio).length) fail('No hay clips con voz en el proyecto');
+      const opts = { threshold: num(flags.threshold), minInside: num(flags.min), minEdge: num(flags['min-edge']), keepAfter: num(flags['keep-after']), keepBefore: num(flags['keep-before']) };
+      for (const k of Object.keys(opts)) if (opts[k] === undefined) delete opts[k];
+      const o = { ...PZ.PAUSE_DEFAULTS, ...opts };
+      const { levels, edges } = PZ.timelineLevels(p, audio);
+      const ranges = PZ.findPauses(levels, { ...o, edges });
+      const total = ranges.reduce((s, r) => s + r.end - r.start, 0);
+      console.log(`${ranges.length} pausas muertas (por debajo de ${o.threshold} dB; ${s3(total)}s en total). Se deja ${s3(o.keepAfter)}s después de hablar y ${s3(o.keepBefore)}s antes:`);
+      for (const r of ranges) console.log(`  ${ts(r.start)} → ${ts(r.end)}  (quita ${s3(r.end - r.start)}s de una pausa de ${s3(r.length)}s${r.edge ? ', junto a un corte' : ''})`);
+      if (!flags.apply) return ranges.length && console.log('\nPara quitarlas: pauses --apply');
+      if (ranges.length) applyCuts(dir, p, ranges);
+      return;
+    }
+
+    case 'animate': {
+      const { dir, p } = await loadSynced();
+      const copied = copyAnimationKit(dir);
+      if (copied.length) console.log(`Kit de animaciones copiado en media/kit/: ${copied.join(', ')}`);
+      const file = path.resolve(dir, flags.guion && flags.guion !== true ? flags.guion : path.join('media', 'kit', 'guion.mjs'));
+      if (!fs.existsSync(file)) fail(`No existe el guion ${file}`);
+      if (copied.includes('guion.mjs')) console.log('Aviso: media/kit/guion.mjs es un ejemplo; cambia sus frases por las de tu vídeo.');
+      const mod = await import(pathToFileURL(file).href + '?' + Date.now());
+      let guion = mod.guion ?? mod.default;
+      if (typeof guion === 'function') guion = guion(A.pieces);
+      if (!Array.isArray(guion)) fail(`${path.basename(file)} tiene que exportar "guion" (una lista de animaciones)`);
+      const doc = transcriptOrFail(dir, p);
+      const { placed, skipped } = A.layoutGuion(guion, doc.words, { total: P.totalDuration(p), aliases: { ...A.DEFAULT_ALIASES, ...(mod.aliases || {}) } });
+      const out = [];
+      for (const x of placed) {
+        try {
+          x.html = A.animationPage(x.g.html({ ...A.pieces, dur: x.dur, t: x.t }), x.dur);
+          x.file = `media/anim/${x.g.id}.html`;
+          out.push(x);
+        } catch (e) {
+          skipped.push({ g: x.g, reason: e.message });
+        }
+      }
+      for (const x of out) console.log(`${x.g.kind === 'escena' ? 'ESCENA' : 'rótulo'}  ${ts(x.start)}  ${x.dur.toFixed(1).padStart(5)}s  ${x.g.id}`);
+      for (const s of skipped) console.log(`Aviso: ${s.g.id} no se coloca (${s.reason})`);
+      const nScenes = out.filter((x) => x.g.kind === 'escena').length;
+      if (flags.dry) return console.log(`\n${nScenes} escenas y ${out.length - nScenes} rótulos (--dry: no se ha cambiado nada)`);
+      const animDir = path.join(dir, 'media', 'anim');
+      fs.mkdirSync(animDir, { recursive: true });
+      for (const x of out) fs.writeFileSync(path.join(dir, x.file), x.html);
+      // borra las animaciones generadas que ya no están en el guion (las hechas a mano no se tocan)
+      for (const f of fs.readdirSync(animDir)) {
+        const abs = path.join(animDir, f);
+        if (f.endsWith('.html') && !out.some((x) => x.file === `media/anim/${f}`) && fs.readFileSync(abs, 'utf8').includes(A.GENERATED_MARK)) fs.rmSync(abs);
+      }
+      await edit(async (p) => {
+        // pistas por nombre: Escenas (pantalla completa) y Rótulos encima; su contenido lo genera el guion
+        const track = (name) => {
+          let t = p.tracks.find((t) => t.kind === 'video' && t.name === name);
+          if (!t) {
+            const r = P.addTrack(p, 'video', name);
+            p = r.project;
+            t = P.findTrack(p, r.trackId);
+          }
+          return t.id;
+        };
+        const ids = { escena: track('Escenas'), rotulo: track('Rótulos') };
+        p = P.clone(p);
+        for (const t of p.tracks) if (t.id === ids.escena || t.id === ids.rotulo) t.clips = [];
+        p = (await syncAssets(dir, p)).project;
+        for (const x of out) {
+          const t = P.findTrack(p, x.g.kind === 'escena' ? ids.escena : ids.rotulo);
+          t.clips.push({ id: P.nextId(p, 'k'), src: x.file, start: x.start, in: 0, duration: x.dur });
+        }
+        return P.normalize(p);
+      });
+      console.log(`\n${nScenes} escenas y ${out.length - nScenes} rótulos colocados en las pistas Escenas y Rótulos.`);
+      return;
+    }
+
     case 'sheet': {
       if (!pos[0]) fail('Indica el clip');
       const dir = projectDir();
@@ -527,16 +623,35 @@ async function main() {
     }
 
     case 'music': {
-      if (!pos[0]) fail('Indica el archivo de música');
+      if (!pos[0] && !flags.generate) fail('Indica el archivo de música (o --generate para componer una)');
+      // duración del vídeo sin contar la música que ya hubiera
+      const videoLength = (p) => P.totalDuration({ ...p, tracks: p.tracks.filter((t) => !t.duck) });
+      let file = pos[0];
+      if (flags.generate) {
+        const { dir, p } = await loadSynced();
+        const total = videoLength(p);
+        if (!(total > 0)) fail('El proyecto está vacío: añade antes el vídeo');
+        console.log(`Componiendo ${s3(total)}s de música lo-fi a ${M.LOFI.bpm} BPM…`);
+        const song = M.composeLofi(total, { seed: num(flags.seed) ?? 7 });
+        const wav = path.join(dir, '.editor', 'music', 'musica-generada.wav');
+        file = path.join(dir, 'media', 'musica-generada.mp3');
+        fs.mkdirSync(path.dirname(wav), { recursive: true });
+        fs.writeFileSync(wav, M.stereoWav(song.left, song.right, song.sampleRate));
+        await runFfmpeg(['-y', '-hide_banner', '-loglevel', 'error', '-i', wav, '-c:a', 'libmp3lame', '-b:a', '192k', file]);
+        fs.rmSync(wav);
+        console.log(`Música: ${file} (${song.bars} compases; original, sin derechos de terceros)`);
+      }
       const { p, r } = await edit(async (p, dir) => {
-        const abs = path.resolve(pos[0]);
-        if (!fs.existsSync(abs) && !fs.existsSync(resolveSrc(dir, pos[0]))) fail(`No existe ${pos[0]}`);
-        const src = fs.existsSync(abs) ? toSrc(dir, abs) : pos[0];
-        p = (await syncAssets(dir, { ...p, assets: { ...p.assets, [src]: p.assets[src] } }, { scanMedia: false })).project;
-        const total = P.totalDuration(p);
+        const abs = path.resolve(file);
+        if (!fs.existsSync(abs) && !fs.existsSync(resolveSrc(dir, file))) fail(`No existe ${file}`);
+        const src = fs.existsSync(abs) ? toSrc(dir, abs) : file;
+        // al volver a componerla, sustituye a la anterior en vez de apilar pistas
+        p = { ...p, tracks: p.tracks.filter((t) => !(t.kind === 'audio' && t.clips.length && t.clips.every((c) => c.src === src))) };
+        p = (await syncAssets(dir, { ...p, assets: { ...p.assets, [src]: undefined } }, { scanMedia: false })).project;
+        const total = videoLength(p);
         const tr = P.addTrack(p, 'audio', 'Música');
         const duck = flags.duck === undefined || flags.duck === true ? true : Number(flags.duck);
-        const added = P.addClip(P.updateTrack(tr.project, tr.trackId, { duck }), { src, trackId: tr.trackId, start: 0, duration: total > 0 ? total : undefined, volume: num(flags.volume) ?? 0.5 });
+        const added = P.addClip(P.updateTrack(tr.project, tr.trackId, { duck }), { src, trackId: tr.trackId, start: 0, duration: total > 0 ? total : undefined, volume: num(flags.volume) ?? (flags.generate ? 0.45 : 0.5) });
         return { project: added.project, clipId: added.clipId, trackId: tr.trackId };
       });
       const c = P.findClip(p, r.clipId).clip;
