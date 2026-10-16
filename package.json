@@ -1,6 +1,6 @@
 {
   "name": "consigue-tu-editor",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Consigue tu editor de vídeo optimizado para Claude gratis: editor de vídeo de escritorio para editar a medias con Claude",
   "main": "electron/main.mjs",
   "type": "module",

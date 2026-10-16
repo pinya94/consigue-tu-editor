@@ -214,8 +214,8 @@ function Shortcuts() {
   const rows = [
     ['Espacio', 'Reproducir / pausa'],
     ['S', 'Cortar en la cabeza lectora'],
-    ['Supr', 'Borrar clip'],
-    ['Mayús+Supr', 'Borrar y cerrar hueco'],
+    ['Supr', 'Borrar (lo de detrás se adelanta)'],
+    ['Mayús+Supr', 'Borrar dejando hueco'],
     ['← →', 'Fotograma anterior / siguiente'],
     ['Mayús+← →', '1 segundo'],
     ['Ctrl+Z / Ctrl+Y', 'Deshacer / rehacer'],
