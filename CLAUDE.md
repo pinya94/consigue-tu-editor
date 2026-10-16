@@ -14,6 +14,8 @@ TypeScript y FFmpeg (binarios de `ffmpeg-static` y `ffprobe-static`). La UI est�
 - `core/transcript.mjs`: transcripción pura (sin Node): palabras de whisper, ajuste a la voz, paso al timeline, tomas repetidas, búsqueda de texto y rangos de corte.
 - `core/whisper.mjs`: whisper.cpp (instalar, transcribir, caché en `.editor/transcripts/`, `.editor/transcript.json`). Su ubicación se guarda en `%APPDATA%/consigue-tu-editor/whisper.json`.
 - `core/waveform.mjs` (picos del audio, `.editor/waveforms/`) y `core/duck.mjs` (curva de ducking, pura; la usan la exportación y la preview).
+- `core/pauses.mjs` (pausas muertas del montaje por volumen, pura), `core/animate.mjs` (guion de animaciones anclado a la transcripción y piezas del kit, pura) y `core/music.mjs` (sintetizador de música de fondo lo-fi, puro).
+- `docs/kit/`: plantilla del kit de animaciones (`kit.css`, `kit.js`, `guion.mjs`, `LEEME.md`) que `init` y `animate` copian a `media/kit/` de cada proyecto, sin sobrescribir.
 - `electron/main.mjs`: ventana, IPC, vigilancia de la carpeta del proyecto y modo `--cli` sin ventana (export/frame).
 - `electron/server.mjs`: servidor HTTP local con Range. Inyecta `anim-runtime.js` en los HTML.
 - `electron/htmlRender.mjs`: renderiza las animaciones HTML fotograma a fotograma, con alfa (ventana offscreen).

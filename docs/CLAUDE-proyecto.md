@@ -29,12 +29,16 @@ Comandos habituales (los tiempos son segundos del timeline; también vale `1:02.
 {{EDITOR}} delete c4 --ripple                        # borra y cierra el hueco
 {{EDITOR}} silences c1                               # lista los silencios (umbral automático)
 {{EDITOR}} silences c1 --apply                       # los quita (jump cuts) con márgenes buenos
+{{EDITOR}} pauses                                    # pausas muertas de todo el montaje (--apply: quitarlas)
 {{EDITOR}} transcribe                                 # palabras con su tiempo en .editor/transcript.json
 {{EDITOR}} transcript                                # el montaje por frases (--words: palabra a palabra)
 {{EDITOR}} retakes                                   # tomas repetidas, muletillas, frases a medias
 {{EDITOR}} cut-text "bueno, antes de" "vamos allá"   # quita ese trozo, cortando en silencios
 {{EDITOR}} verify                                    # revisa los cortes y vuelve a transcribir el montaje
 {{EDITOR}} music media/cancion.mp3 --duck 0.25       # música de fondo que baja sola al hablar
+{{EDITOR}} music --generate                          # compone una música original a la medida del vídeo
+{{EDITOR}} animate --dry                             # dónde caería cada animación de media/kit/guion.mjs
+{{EDITOR}} animate                                   # las genera y las coloca (pistas Escenas y Rótulos)
 {{EDITOR}} sheet c1 --every 2                        # hojas de miniaturas para revisar el vídeo
 {{EDITOR}} frame 12.5 --out .editor/f.png            # fotograma compuesto
 {{EDITOR}} review                                    # 360p + audio WAV 16 kHz del montaje, muy ligero
@@ -135,6 +139,20 @@ mirando el PNG.
 
 Nunca cortes a mitad de frase: corta solo en silencios. Después, revisa con `export --draft` o `review`.
 
+### Pausas muertas de todo el montaje
+
+Cuando el montaje ya está cortado (tomas repetidas fuera), `pauses` repasa el vídeo entero y lista
+las pausas que sobran; `pauses --apply` las quita:
+- mide el volumen en ventanas de 50 ms; es pausa lo que queda por debajo de -33 dB (`--threshold`);
+- dentro de un clip quita las pausas de 0,6 s o más (`--min`); pegadas a un corte, al principio o al
+  final, las de 0,4 s o más (`--min-edge`), incluidos los clips enteros sin voz;
+- de cada pausa deja 0,14 s después de hablar y 0,08 s antes (`--keep-after`, `--keep-before`);
+- quita en **todas las pistas a la vez** (como `cut-text`): las animaciones y la música siguen
+  cayendo sobre la misma frase.
+
+Al quitar una pausa se crean cortes nuevos, así que una segunda pasada puede encontrar alguna más
+pegada a ellos. Después, `verify --quick`.
+
 ### Transcripción, tomas repetidas y cortes por texto
 
 1. `transcribe` transcribe la voz con whisper.cpp (en español). Si dice que no está instalado,
@@ -166,6 +184,33 @@ Nunca cortes a mitad de frase: corta solo en silencios. Después, revisa con `ex
 `music media/cancion.mp3` crea una pista "Música" con la canción de principio a fin, al 50 % de
 volumen y con ducking: baja al 25 % mientras se habla y sube en las pausas. Ajusta con
 `--volume` y `--duck 0.15` (más bajo) o `track set a2 duck=0.4`.
+
+Si el usuario no tiene música, `music --generate` compone una original (sin derechos de terceros):
+lo-fi ambiental suave a 84 BPM, con colchón de acordes, piano eléctrico, bajo y percusión mínima, y
+fundidos al principio y al final. Dura exactamente lo que el vídeo y queda en
+`media/musica-generada.mp3`, en una pista "Música" al 45 % y con ducking (`--volume`, `--duck`).
+`--seed 3` da otra variación. Si cambias la duración del vídeo, vuelve a ejecutarlo: sustituye la
+pista anterior.
+
+### Animaciones desde un guion (comando animate)
+
+Para un vídeo con muchas animaciones, en vez de colocarlas a mano escribe un guion. `init` deja en
+`media/kit/` un kit: `guion.mjs` (ejemplo), `kit.css` y `kit.js` (estilo oscuro y profesional, con
+acento coral) y `LEEME.md` con las piezas disponibles. Si el proyecto no lo tiene, `animate` lo copia.
+
+1. Cada entrada de `guion.mjs` es `{ id, kind: 'escena' | 'rotulo', from: 'frase', to: 'frase', html: (h) => … }`.
+   `from` y `to` son palabras que se dicen (cópialas de `transcript`), no segundos. Si un corte se
+   ha llevado alguna, el editor prueba con menos: las primeras de `from`, las últimas de `to`.
+2. `html(h)` devuelve el contenido con las piezas del kit (`h.kin`, `h.side`, `h.ring`, `h.badges`,
+   `h.stamp`, `h.bicho`…). `h.t('palabras')` es el segundo, dentro de la animación, en que se dicen:
+   úsalo en `--d` para que cada elemento entre justo a tiempo.
+3. `animate --dry` enseña dónde cae cada una y avisa de las frases que no encuentra. `animate` escribe
+   `media/anim/<id>.html` y rehace las pistas **Escenas** (pantalla completa, en los tramos en que no
+   se mira a cámara) y **Rótulos** (a un lado de la cara, encima). Las escenas mandan: un rótulo que
+   las pisa se recorta, y si se queda en menos de 1,2 s se descarta.
+4. Si cambias cortes, vuelve a ejecutar `animate`: las animaciones siguen a las frases. No edites a
+   mano los HTML generados ni los clips de esas dos pistas: se rehacen cada vez.
+5. Comprueba con `frame` algunos instantes de cada animación.
 
 ### Acercamientos (zoom) en los cortes
 

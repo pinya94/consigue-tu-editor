@@ -172,6 +172,7 @@ Claude usa la CLI, pero tú también puedes usarla. Con la app instalada:
 | `set <clip> zoom=1.2 zoomX=0.5 zoomY=0.4 volume=0.5` | Cambiar propiedades (`zoomTo=1.2 zoomTime=0.4`: zoom animado) |
 | `delete <clip> [--ripple]` | Borrar (con `--ripple`, todo lo de detrás se adelanta en todas las pistas) |
 | `silences <clip> [--apply]` | Detectar (y quitar) silencios |
+| `pauses [--apply]` | Quitar las pausas muertas de todo el montaje (por debajo de -33 dB), en todas las pistas a la vez |
 | `sheet <clip> [--every 2]` | Hojas de miniaturas para revisar el vídeo |
 | `frame <t>` | Fotograma final compuesto en PNG |
 | `review` | Vídeo de 360p y audio WAV muy ligeros, para revisar el montaje |
@@ -181,6 +182,8 @@ Claude usa la CLI, pero tú también puedes usarla. Con la app instalada:
 | `cut-text "desde…" "hasta…"` · `cut-words 120-135` | Cortar por texto o por número de palabra, ajustado a los silencios |
 | `verify [--quick]` | Revisa los cortes y vuelve a transcribir el montaje para ver si se entiende |
 | `music <archivo> [--duck 0.25]` | Música de fondo que baja sola cuando hablas |
+| `music --generate [--volume 0.45] [--duck 0.25]` | Compone una música original (lo-fi suave, 84 BPM) a la medida del vídeo y la añade igual |
+| `animate [--dry]` | Genera las animaciones del guion `media/kit/guion.mjs` (ancladas a frases de la transcripción) y las coloca en las pistas Escenas y Rótulos |
 | `whisper install --dir D:/whisper` | Descarga whisper.cpp y el modelo en español |
 | `export [--draft]` | Exportar a MP4 (o un borrador rápido de 480p) |
 

@@ -82,7 +82,27 @@ export function initProject(dir, opts = {}) {
   const p = createProject({ name: opts.name || path.basename(path.resolve(dir)), ...opts });
   saveProject(dir, p);
   writeProjectGuide(dir);
+  copyAnimationKit(dir);
   return p;
+}
+
+export const KIT_DIR = path.join(MEDIA_DIR, 'kit');
+
+// Copia la plantilla del kit de animaciones (docs/kit) a media/kit. Nunca sobrescribe: el kit de
+// cada proyecto se puede retocar. Devuelve los archivos copiados.
+export function copyAnimationKit(dir) {
+  const here = path.dirname(fileURLToPath(import.meta.url));
+  const from = path.join(here, '..', 'docs', 'kit');
+  const to = path.join(dir, KIT_DIR);
+  if (!fs.existsSync(from)) return [];
+  fs.mkdirSync(to, { recursive: true });
+  const copied = [];
+  for (const f of fs.readdirSync(from)) {
+    if (fs.existsSync(path.join(to, f))) continue;
+    fs.copyFileSync(path.join(from, f), path.join(to, f));
+    copied.push(f);
+  }
+  return copied;
 }
 
 export const APP_NAME = 'Consigue tu editor de vídeo optimizado para Claude gratis';
